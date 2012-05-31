@@ -1020,7 +1020,6 @@ my $SQL_P_result=&SQL($SQL);
 ## AUTH
 &response('LOG','PAYMNT-AUTH-REQ',"$REQUEST->{payment}{salt},PAYMNT,$REMOTE_HOST,-sha512,$REQUEST->{payment}{sign}");
 if (&auth($REQUEST->{payment}{salt},'PAYMNT',$REMOTE_HOST,"-sha512",$REQUEST->{payment}{sign})==0){
-#
 &response('LOG','PAYMNT-TR-RESULT',"@TR");
 use vars qw($rate);
 foreach my $tr (@TR){
