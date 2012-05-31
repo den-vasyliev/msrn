@@ -690,9 +690,10 @@ return 'USSD 0';
 &response('LOG','MOC-SIG-USSD-CFU-REQUEST',"$ussd_code $ussd_subcode");
 &response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode");
 if ($ussd_subcode=~/(.?)(380\d{9})/){#if number length 12 digits
-print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please call **21*+380445945754# from $2 to activate. Call ##21# to deactivate");
 my $SQL=qq[UPDATE cc_card set fax="$2" where useralias="$IMSI" or firstname="$IMSI"];
 my $SQL_result=&SQL($SQL);
+print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please call **21*+380445945754# from $2 to activate. Call ##21# to deactivate") if $SQL_result==1;
+print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Sorry cant set CFU for this number") if $SQL_result!=1;
 return "USSD $SQL_result";
 }else{ #if number length
 print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Incorrect number $2. Please check format +<12 digits>");
