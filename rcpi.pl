@@ -20,6 +20,7 @@ use Switch;
 use POSIX;
 use Time::Local;
 use IO::File;
+use Encode;
 use warnings;
 use strict;
 no warnings 'once';
@@ -810,7 +811,7 @@ switch ($code){
 		$URL=qq[transaction_id=$transaction_id&ussdto=$msisdn&$URL_QUERY&&message=$message&timestamp=$timestamp] if $message_code;
 	}#case sendussd
 	case "SIG_SendSMS" {
-		$URL=qq[transaction_id=$transaction_id&smsto=%2B380674014759&smsfrom=ruimtools&$URL_QUERY&message=test&timestamp=$timestamp&msisdn=447700079964];
+		$URL=qq[transaction_id=$transaction_id&smsto=%2B$query&smsfrom=ruimtools&$URL_QUERY&msisdn=$options1&message=$options&timestamp=$timestamp];
 	}#case sendsms
 	case "SIG_SendResale" {
 		&response('LOG',"$code-PARAM_GET","$query,$host,$msisdn,$message_code,$options,$options1");
@@ -831,13 +832,13 @@ switch ($code){
 	}#else switch code
 }#switch code
 #
-my $SENDGET=qq["$host$URL"] if $URL;
+my $SENDGET=qq[$host$URL] if $URL;
 #
 &response('LOG',"SENDGET-$code-URL","$SENDGET") if $debug>=3;
 &response('LOGDB',"$code","$transaction_id","$query",'REQ',"$SENDGET $msrn"); 
 #
 &response('LOG',"SENDGET-$code-URL","$curl $SENDGET");
-my @XML=`$curl $SENDGET` if $URL;
+my @XML=`$curl "$SENDGET"` if $URL;
 #
 if (@XML){
 &response('LOG',"$code-RESPOND","@XML") if $debug>=3;
@@ -1101,14 +1102,20 @@ my $sql_result=&SQL($SQL);
 if ($sql_result>0){#if insert ok
 switch ($flag){
 	case 11{#one message
-my $SQL=qq[SELECT 0x$sms_text];# ! sql
+my $SQL=qq[SELECT X\'$sms_text\'];# ! sql
 my @sql_result=&SQL($SQL);
-$sms_text=$sql_result[0];
+&response('LOG','SMS-ENC-RESULT',"$sql_result[0]");
+my $gsm0338=encode("gsm0338", $sql_result[0]);    # loads Encode::GSM0338 implicitly
+&response('LOG','SMS-ENC-RESULT-GSM',"$gsm0338");
+my $utf8=decode("gsm0338", $gsm0338);
+&response('LOG','SMS-ENC-RESULT-UTF',"$utf8");
+$sms_text=$utf8;
 my $sms_from=uri_unescape($Q{msisdn});
 $sms_from=~s/\+//;
 &response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
-#send $code,$query,$host,$msisdn,$message_code,$options,$options1
-my $sms_result=&SENDGET('SIG_SendSMS','+380674014759','','ruimtools','',"test");
+&response('LOG','SMS-SEND-PARAM',"'SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from");
+#$code,$query,$host,$msisdn,$message_code,$options,$options1
+my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
 return $sms_result;
 	}#if insert
 	else{#else no insert
