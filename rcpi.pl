@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 010612rev.18.3';
+my $REV='API Server 010612rev.18.4';
 ##
 #################################################################
 ## 
@@ -982,7 +982,7 @@ switch ($type){#select auth type
 	case "RESALE"{#resale auth
 my $SQL=qq[SELECT name,public_key,auth_key from cc_resale where public_key="$KEY" and active=1];
 my @sql_record=&SQL($SQL);
-($reseller_name,$public_key,$auth_key)=@sql_record;
+($reseller_name,$public_key,$ikey)=@sql_record;
 $md5=~s/_KYES_/$REMOTE_HOST$reseller_name$public_key/;
 	}#case resale
 ###
@@ -1000,9 +1000,9 @@ else{
 &response('LOG',"RC-API-$type-MD5","$REMOTE_HOST:$agent:$KEY");
 $md5_result=`$md5`;
 chomp($md5_result);
-&response('LOG',"RC-API-$type-MD5-RESULT","$md5 $md5_result") if $debug==4;
+&response('LOG',"RC-API-$type-MD5-RESULT","$md5 $md5_result") if $debug>=3;
 #
-&response('LOG',"RC-API-$type-KEYS-CHECK","$md5_result eq $ikey") if $debug==4;
+&response('LOG',"RC-API-$type-KEYS-CHECK","$md5_result eq $ikey") if $debug>=3;
 if ($md5_result eq $ikey){#if md5 OK
 &response('LOG','RC-API-AUTH',"OK");
 return 0;
