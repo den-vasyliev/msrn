@@ -115,8 +115,8 @@ my $qkeys= keys %XML_KEYS;
 &response('LOG','MAIN-XML-PARSE-RETURN',$qkeys);
 if ($qkeys){#if kyes>0
 my $IN_SET='';
-$IN_SET="$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}:" if  $XML_KEYS{msisdn};
-$IN_SET=$IN_SET."$XML_KEYS{code}:$XML_KEYS{sub_code}:" if $XML_KEYS{code};
+$IN_SET="$XML_KEYS{msisdn}:$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}" if  $XML_KEYS{msisdn};
+$IN_SET=$IN_SET.":$XML_KEYS{code}:$XML_KEYS{sub_code}" if $XML_KEYS{code};
 $IN_SET=$IN_SET."$XML_KEYS{ident}:$XML_KEYS{amount}" if $XML_KEYS{salt};
 &response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'IN',$IN_SET);
 #Get action type
