@@ -639,6 +639,25 @@ my $SQL_result=&SQL($SQL);
 return "USSD $SQL_result";
 	}#case 110
 ###
+case "122"{#SMS request
+&response('LOG','MOC-SIG-USSD-SMS-REQUEST',"$ussd_code");
+&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'REQ',"$ussd_code $ussd_subcode");
+my $SMS_result=&SMS("$ussd_subcode",$Q{transactionid});
+my $SMS_response='';
+switch ($SMS_result){
+	case 0 {#one message sent
+	$SMS_response="Your message was sent!";
+	}#case 0
+	else{#unknown result
+	$SMS_response="UNKNOWN";
+	}#else
+}#end switch sms result
+	&response('LOG','MOC-SIG-USSD-SMS-RESULT',"$SMS_result");
+	&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'RSP',"$SMS_result");
+	print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$SMS_response");
+	return "USSD $SMS_result";
+	}#case 122
+###
 	case "123"{#voucher refill request
 &response('LOG','MOC-SIG-USSD-VAUCHER-REQUEST',"$ussd_subcode");
 &response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'REQ',"$ussd_subcode");
@@ -675,11 +694,12 @@ return 'USSD 0';
 	case "126"{#RATES request
 &response('LOG','MOC-SIG-USSD-RATES',"$ussd_code $ussd_subcode");
 &response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode");
-my $msrn=&SENDGET('SIG_GetMSRN',"$IMSI",'','','','122');
+my $msrn=&SENDGET('SIG_GetMSRN',"$IMSI",'','','',"$ussd_code");
 my $SQL=qq[SELECT request from cc_actions where id=71];
 my @sql_record=&SQL($SQL);
 $SQL="$sql_record[0]";
-$SQL=~s/_FROMDEST_/$ussd_subcode/;
+$ussd_subcode=~/(.?)(\d{12})/;
+$SQL=~s/_FROMDEST_/$2/;
 $SQL=~s/_TODEST_/$msrn/;
 my @sql_result=&SQL($SQL);
 my $rate=substr($sql_result[0],0,6);
@@ -774,7 +794,7 @@ $message=uri_escape($message) if $code ne 'SIG_SendResale';
 #
 switch ($code){
 	case "SIG_GetMSRN" {
-		$msrn=&reuse_msrn($query) if $options eq '122';
+		$msrn=&reuse_msrn($query) if $options eq '126';
 		&response('LOG',"$code-REUSE-GET","$msrn");
 		$URL=qq[transaction_id=$transaction_id&query=$query&$URL_QUERY&timestamp=$timestamp] if $msrn==0;
 		&response('LOG',"$code-URL-SET","$URL");
@@ -1057,6 +1077,44 @@ my $sql_result=&SQL($SQL);
 return $sql_result; 
 }#end if signaling
 }# END sub LU_H
+#
+### sub USSD_SMS #
+sub SMS{
+use vars qw(%Q);
+my ($ussd_subcode,$sms_id)=@_;
+&response('LOG','SMS-REQ',"$ussd_subcode");
+$ussd_subcode=~/(\d{2})\*(.?)(\d{12})\*(\w+)/;
+my $flag=$1;
+my $sms_dest=$3;
+my $sms_text=$4;
+&response('LOG','SMS-REQ',"$flag,$sms_dest");
+switch ($flag){
+	case 11{#one message
+#insert
+my $SQL=qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`text`) values ("$sms_id","$Q{msisdn}","$sms_dest","$flag","$sms_text")];
+my $sql_result=&SQL($SQL);
+&response('LOG','SMS-REQ',"$sql_result");
+#send
+return 0;
+	}#case 11
+#
+	case 21{#one message
+#insert
+#wait
+return 1;
+	}#case 21
+#
+	case 22{#one message
+#update
+#send
+return 2;
+	}#case 22
+#
+	else{#unknown flag or excited max path
+	return -1;
+	}#else
+}#end switch flag
+}# END sub USSD_SMS
 #
 &response('LOG','SOCKET',"CLOSE $new_sock ##################################################");
 $new_sock->shutdown(2);
