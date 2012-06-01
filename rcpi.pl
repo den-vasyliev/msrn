@@ -810,7 +810,7 @@ switch ($code){
 		$URL=qq[transaction_id=$transaction_id&ussdto=$msisdn&$URL_QUERY&&message=$message&timestamp=$timestamp] if $message_code;
 	}#case sendussd
 	case "SIG_SendSMS" {
-		$URL=qq[transaction_id=$transaction_id&smsto=$query&smsfrom=$msisdn&$URL_QUERY&&message=$options&timestamp=$timestamp];
+		$URL=qq[transaction_id=$transaction_id&smsto=%2B380674014759&smsfrom=ruimtools&$URL_QUERY&message=test&timestamp=$timestamp&msisdn=447700079964];
 	}#case sendsms
 	case "SIG_SendResale" {
 		&response('LOG',"$code-PARAM_GET","$query,$host,$msisdn,$message_code,$options,$options1");
@@ -831,13 +831,13 @@ switch ($code){
 	}#else switch code
 }#switch code
 #
-my $SENDGET=qq[$host$URL] if $URL;
+my $SENDGET=qq["$host$URL"] if $URL;
 #
 &response('LOG',"SENDGET-$code-URL","$SENDGET") if $debug>=3;
 &response('LOGDB',"$code","$transaction_id","$query",'REQ',"$SENDGET $msrn"); 
 #
 &response('LOG',"SENDGET-$code-URL","$curl $SENDGET");
-my @XML=`$curl "$SENDGET"` if $URL;
+my @XML=`$curl $SENDGET` if $URL;
 #
 if (@XML){
 &response('LOG',"$code-RESPOND","@XML") if $debug>=3;
@@ -1108,7 +1108,7 @@ my $sms_from=uri_unescape($Q{msisdn});
 $sms_from=~s/\+//;
 &response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
 #send $code,$query,$host,$msisdn,$message_code,$options,$options1
-my $sms_result=&SENDGET('SIG_SendSMS',"$sms_dest",'',"$Q{msisdn}",'',"$sms_text");
+my $sms_result=&SENDGET('SIG_SendSMS','+380674014759','','ruimtools','',"test");
 return $sms_result;
 	}#if insert
 	else{#else no insert
