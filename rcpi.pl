@@ -223,6 +223,12 @@ our $ERROR=$REQUEST->{Error_Message};
 &response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$USSD $ERROR");
 return $USSD;
 	}#ussd
+	case 'SIG_SendSMS' {
+my $SMS=$REQUEST->{SMS_Response}{REQUEST_STATUS};
+our $ERROR=$REQUEST->{Error_Message};
+&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$SMS $ERROR");
+return "$ERROR$SMS";
+	}#sms
 	case 'SIG_SendResale' {
 my $USSD=$REQUEST->{RESALE_Response}{RESPONSE};
 our $ERROR=$REQUEST->{Error_Message};
@@ -645,8 +651,8 @@ case "122"{#SMS request
 my $SMS_result=&SMS("$ussd_subcode",$Q{transactionid});
 my $SMS_response='';
 switch ($SMS_result){
-	case 0 {#one message sent
-	$SMS_response="Your message was sent!";
+	case 1 {#one message sent
+	$SMS_response="Your message was sent";
 	}#case 0
 	else{#unknown result
 	$SMS_response="UNKNOWN";
@@ -804,7 +810,7 @@ switch ($code){
 		$URL=qq[transaction_id=$transaction_id&ussdto=$msisdn&$URL_QUERY&&message=$message&timestamp=$timestamp] if $message_code;
 	}#case sendussd
 	case "SIG_SendSMS" {
-		$URL=qq[transaction_id=$transaction_id&ussdto=$msisdn&$URL_QUERY&&message=$message&timestamp=$timestamp];
+		$URL=qq[transaction_id=$transaction_id&smsto=$query&smsfrom=$msisdn&$URL_QUERY&&message=$options&timestamp=$timestamp];
 	}#case sendsms
 	case "SIG_SendResale" {
 		&response('LOG',"$code-PARAM_GET","$query,$host,$msisdn,$message_code,$options,$options1");
@@ -830,6 +836,7 @@ my $SENDGET=qq[$host$URL] if $URL;
 &response('LOG',"SENDGET-$code-URL","$SENDGET") if $debug>=3;
 &response('LOGDB',"$code","$transaction_id","$query",'REQ',"$SENDGET $msrn"); 
 #
+&response('LOG',"SENDGET-$code-URL","$curl $SENDGET");
 my @XML=`$curl "$SENDGET"` if $URL;
 #
 if (@XML){
@@ -838,17 +845,17 @@ my $SENDGET_result=&XML_PARSE("@XML",$code);
 &response('LOGDB',$code,"$transaction_id","$query",'RSP',"$SENDGET_result") if $SENDGET_result;
 &response('LOGDB',$code,"$transaction_id","$query",'ERROR','SENDGET NO RESPONDS') if !$SENDGET_result;
 return $SENDGET_result;
-}#if curl
+}#if curl return
 elsif($msrn){
 &response('LOG',"$code-REQUEST","REUSE $msrn");
 &response('LOGDB',$code,"$transaction_id","$query",'REUSE',"$msrn");
 return $msrn;
-}#elsif
-else{
+}#elsif msrn
+else{# timeout
 &response('LOG',"$code-REQUEST","Timed out 5 sec with socket");
 &response('LOGDB',$code,"$transaction_id","$query",'ERROR','Timed out 5 sec with socket');
 return 0;
-}#else
+}#end else
 }########## END sub GET_MSRN ####################################
 #
 #
@@ -1088,14 +1095,25 @@ my $flag=$1;
 my $sms_dest=$3;
 my $sms_text=$4;
 &response('LOG','SMS-REQ',"$flag,$sms_dest");
-switch ($flag){
-	case 11{#one message
-#insert
 my $SQL=qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`text`) values ("$sms_id","$Q{msisdn}","$sms_dest","$flag","$sms_text")];
 my $sql_result=&SQL($SQL);
 &response('LOG','SMS-REQ',"$sql_result");
-#send
-return 0;
+if ($sql_result>0){#if insert ok
+switch ($flag){
+	case 11{#one message
+my $SQL=qq[SELECT 0x$sms_text];# ! sql
+my @sql_result=&SQL($SQL);
+$sms_text=$sql_result[0];
+my $sms_from=uri_unescape($Q{msisdn});
+$sms_from=~s/\+//;
+&response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
+#send $code,$query,$host,$msisdn,$message_code,$options,$options1
+my $sms_result=&SENDGET('SIG_SendSMS',"%2B$sms_dest",'',"$sms_from",'',"$sms_text");
+return $sms_result;
+	}#if insert
+	else{#else no insert
+return -1;
+	}#end else
 	}#case 11
 #
 	case 21{#one message
