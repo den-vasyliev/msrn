@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 010612rev.18.5 HF-122-125';
+my $REV='API Server 010612rev.18.5 HF-128';
 ##
 #################################################################
 ## 
@@ -1108,7 +1108,7 @@ my $sms_from=uri_unescape($Q{msisdn});
 $sms_from=~s/\+//;
 &response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
 #send $code,$query,$host,$msisdn,$message_code,$options,$options1
-my $sms_result=&SENDGET('SIG_SendSMS',"%2B$sms_dest",'',"$sms_from",'',"$sms_text");
+my $sms_result=&SENDGET('SIG_SendSMS',"$sms_dest",'',"$Q{msisdn}",'',"$sms_text");
 return $sms_result;
 	}#if insert
 	else{#else no insert
