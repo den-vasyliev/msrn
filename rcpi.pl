@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 010612rev.18.5';
+my $REV='API Server 010612rev.18.5 HF-122-125';
 ##
 #################################################################
 ## 
@@ -639,22 +639,6 @@ my $SQL_result=&SQL($SQL);
 return "USSD $SQL_result";
 	}#case 110
 ###
-	case "122"{#RATES request
-&response('LOG','MOC-SIG-USSD-RATES',"$ussd_code $ussd_subcode");
-&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode");
-my $msrn=&SENDGET('SIG_GetMSRN',"$IMSI",'','','','122');
-my $SQL=qq[SELECT request from cc_actions where id=71];
-my @sql_record=&SQL($SQL);
-$SQL="$sql_record[0]";
-$SQL=~s/_FROMDEST_/$ussd_subcode/;
-$SQL=~s/_TODEST_/$msrn/;
-my @sql_result=&SQL($SQL);
-my $rate=substr($sql_result[0],0,6);
-&response('LOG','MOC-SIG-USSD-RATES-RETURN',"$rate");
-print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Rate from $msrn to $ussd_subcode is $rate");
-return "USSD 0";
-	}#case 122
-###
 	case "123"{#voucher refill request
 &response('LOG','MOC-SIG-USSD-VAUCHER-REQUEST',"$ussd_subcode");
 &response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'REQ',"$ussd_subcode");
@@ -688,7 +672,23 @@ print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Balance $s
 return 'USSD 0';
 	}#case 124
 ###
-	case "125"{#CFU request
+	case "126"{#RATES request
+&response('LOG','MOC-SIG-USSD-RATES',"$ussd_code $ussd_subcode");
+&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode");
+my $msrn=&SENDGET('SIG_GetMSRN',"$IMSI",'','','','122');
+my $SQL=qq[SELECT request from cc_actions where id=71];
+my @sql_record=&SQL($SQL);
+$SQL="$sql_record[0]";
+$SQL=~s/_FROMDEST_/$ussd_subcode/;
+$SQL=~s/_TODEST_/$msrn/;
+my @sql_result=&SQL($SQL);
+my $rate=substr($sql_result[0],0,6);
+&response('LOG','MOC-SIG-USSD-RATES-RETURN',"$rate");
+print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Rate from $msrn to $ussd_subcode is $rate");
+return "USSD 0";
+	}#case 126
+###
+	case "127"{#CFU request
 &response('LOG','MOC-SIG-USSD-CFU-REQUEST',"$ussd_code $ussd_subcode");
 &response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'REQ',"$ussd_code $ussd_subcode");
 if ($ussd_subcode=~/(.?)(380\d{9})/){#if number length 12 digits
@@ -704,7 +704,7 @@ return "USSD $SQL_result";
 print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Incorrect number $2. Please use format: 380 XX XXX XXXX");
 return 'USSD -1';
 }#end else if number length
-	}#case 125
+	}#case 127
 ###
 else{#switch ussd code
 &response('LOG','MOC-SIG-USSD-UNKNOWN-REQUEST',"$ussd_code");
