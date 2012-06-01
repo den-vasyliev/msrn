@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 010612rev.18.4';
+my $REV='API Server 010612rev.18.5';
 ##
 #################################################################
 ## 
@@ -119,6 +119,7 @@ $IN_SET="$XML_KEYS{msisdn}:$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}" if  $
 $IN_SET=$IN_SET.":$XML_KEYS{code}:$XML_KEYS{sub_code}" if $XML_KEYS{code};
 $IN_SET=$IN_SET."$XML_KEYS{ident}:$XML_KEYS{amount}" if $XML_KEYS{salt};
 &response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'IN',$IN_SET);
+&LU_H;
 #Get action type
 my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});
 eval {
@@ -291,7 +292,7 @@ print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=3;
 my $rv; 
 my $sth;
 our @result=();
-if($SQL!~m/SELECT/i){
+if($SQL!~m/^SELECT/i){
 $rv=$dbh->do($SQL);
 push @result,$rv;
 }
@@ -1044,6 +1045,17 @@ $SQL_T_result="-1 NO AUTH";
 print $new_sock "200 $SQL_T_result";
 return $SQL_T_result;
 }# END sub PAYMNT
+#
+### sub LOCATION HISTORY ##
+sub LU_H{
+use vars qw(%Q);
+my $SQL='';
+if (($Q{imsi})&&($Q{mnc})&&($Q{mcc})&&($Q{request_type})){#if signaling request
+$SQL=qq[UPDATE cc_card set country=(select countrycode from cc_country, cc_mnc where countryname=country and mcc="$Q{mcc}" limit 1), zipcode="$Q{mcc} $Q{mnc}", tag=(select mno from cc_mnc where mnc="$Q{mnc}" and mcc="$Q{mcc}") where useralias="$Q{imsi}" or firstname="$Q{imsi}"];
+my $sql_result=&SQL($SQL);
+&response('LOG','LU-H-RETURN',"$sql_result");
+}#end if signaling
+}# END sub LU_H
 #
 &response('LOG','SOCKET',"CLOSE $new_sock ##################################################");
 $new_sock->shutdown(2);
