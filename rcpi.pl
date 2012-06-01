@@ -119,7 +119,8 @@ $IN_SET="$XML_KEYS{msisdn}:$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}" if  $
 $IN_SET=$IN_SET.":$XML_KEYS{code}:$XML_KEYS{sub_code}" if $XML_KEYS{code};
 $IN_SET=$IN_SET."$XML_KEYS{ident}:$XML_KEYS{amount}" if $XML_KEYS{salt};
 &response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'IN',$IN_SET);
-&LU_H;
+my $LU_H_result=&LU_H;
+&response('LOG','MAIN-LU-H-RETURN',"$LU_H_result");
 #Get action type
 my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});
 eval {
@@ -1053,7 +1054,7 @@ my $SQL='';
 if (($Q{imsi})&&($Q{mnc})&&($Q{mcc})&&($Q{request_type})){#if signaling request
 $SQL=qq[UPDATE cc_card set country=(select countrycode from cc_country, cc_mnc where countryname=country and mcc="$Q{mcc}" limit 1), zipcode="$Q{mcc} $Q{mnc}", tag=(select mno from cc_mnc where mnc="$Q{mnc}" and mcc="$Q{mcc}") where useralias="$Q{imsi}" or firstname="$Q{imsi}"];
 my $sql_result=&SQL($SQL);
-&response('LOG','LU-H-RETURN',"$sql_result");
+return $sql_result; 
 }#end if signaling
 }# END sub LU_H
 #
