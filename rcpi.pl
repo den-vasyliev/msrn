@@ -1108,6 +1108,7 @@ my @sql_result=&SQL($SQL);
 my $gsm0338=encode("gsm0338", $sql_result[0]);    # loads Encode::GSM0338 implicitly
 &response('LOG','SMS-ENC-RESULT-GSM',"$gsm0338");
 my $utf8=decode("gsm0338", $gsm0338);
+$utf8=~s/\?//g;
 &response('LOG','SMS-ENC-RESULT-UTF',"$utf8");
 $sms_text=$utf8;
 my $sms_from=uri_unescape($Q{msisdn});
