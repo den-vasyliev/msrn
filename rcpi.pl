@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 020612rev.19.1 HF-128';
+my $REV='API Server 120612rev.20.0';
 ##
 #################################################################
 ## 
@@ -992,7 +992,7 @@ my $SQL=qq[SELECT resale_price from cc_actions where id=$sig_id];
 my @sql_record=&SQL($SQL);
 my $resale_price=$sql_record[0];
 if ($resale_price>0){#if found sig_id
-$SQL=qq[UPDATE cc_resale set credit=credit+$resale_price where public_key="$reseller"];
+$SQL=qq[UPDATE cc_agent set credit=credit+$resale_price where firstname="$reseller"];
 my $sql_result=&SQL($SQL);
 &response('LOG','RESALE-BILLING-RESULT',"OK $sql_result") if $sql_result>0;
 &response('LOG','RESALE-BILLING-RESULT',"ERROR $sql_result") if $sql_result<=0;
@@ -1010,7 +1010,8 @@ our ($reseller_name,$public_key,$auth_key);
 &response('LOG',"RC-API-$type-AUTH","$REMOTE_HOST:$agent:$KEY:$dgst");
 switch ($type){#select auth type
 	case "RESALE"{#resale auth
-my $SQL=qq[SELECT name,public_key,auth_key from cc_resale where public_key="$KEY" and active=1];
+#my $SQL=qq[SELECT name,public_key,auth_key from cc_resale where public_key="$KEY" and active=1];
+my $SQL=qq[SELECT login,firstname,secondname from cc_agent where firstname="$KEY" and active=1];
 my @sql_record=&SQL($SQL);
 ($reseller_name,$public_key,$ikey)=@sql_record;
 $md5=~s/_KYES_/$REMOTE_HOST$reseller_name$public_key/;
