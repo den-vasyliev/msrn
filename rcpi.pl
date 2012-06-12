@@ -1125,19 +1125,9 @@ return -1;
 	}#end else
 	}#case 11
 #
-	case 21{#one message
-#insert
-#wait
-return 1;
-	}#case 21
-#
-	case 22{#one message
-#update
-#send
-return 2;
-	}#case 22
-#
-	else{#unknown flag or excited max path
+	else{#multipage
+$flag=/(\d{1})(\d{1})/;	
+
 	return -1;
 	}#else
 }#end switch flag
