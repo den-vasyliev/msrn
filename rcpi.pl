@@ -941,7 +941,7 @@ switch ($code){
 sub resale{
 use vars qq(%Q);
 my ($req_type,$imsi,$resale,$options,$options1)=@_;
-my $SQL=qq[SELECT auth_key, cgi from cc_resale where public_key="$resale"];
+my $SQL=qq[SELECT lastname, address from cc_agent where firstname="$resale"];
 my @sql_record=&SQL($SQL);
 my ($auth_key,$cgi)=@sql_record;
 
@@ -1010,8 +1010,7 @@ our ($reseller_name,$public_key,$auth_key);
 &response('LOG',"RC-API-$type-AUTH","$REMOTE_HOST:$agent:$KEY:$dgst");
 switch ($type){#select auth type
 	case "RESALE"{#resale auth
-#my $SQL=qq[SELECT name,public_key,auth_key from cc_resale where public_key="$KEY" and active=1];
-my $SQL=qq[SELECT login,firstname,secondname from cc_agent where firstname="$KEY" and active=1];
+my $SQL=qq[SELECT login,firstname,lastname from cc_agent where firstname="$KEY" and active=1];
 my @sql_record=&SQL($SQL);
 ($reseller_name,$public_key,$ikey)=@sql_record;
 $md5=~s/_KYES_/$REMOTE_HOST$reseller_name$public_key/;
