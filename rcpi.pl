@@ -300,7 +300,7 @@ print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=3;
 my $rv; 
 my $sth;
 our @result=();
-if(($SQL!~m/^SELECT/i)&&($SQL!~m/^CALL/i)){
+if($SQL!~m/^SELECT/i){
 $rv=$dbh->do($SQL);
 push @result,$rv;
 }
