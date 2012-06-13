@@ -655,6 +655,9 @@ switch ($SMS_result){
 	case 1 {#one message sent
 	$SMS_response="Your message was sent";
 	}#case 1
+	case 2 {#one message sent
+	$SMS_response="Please wait while sending message...";
+	}#case 2
 	else{#unknown result
 	$SMS_response="UNKNOWN";
 	}#else
@@ -1126,6 +1129,7 @@ $SQL=~s/_SRC_/$Q{msisdn}/;
 $SQL=~s/_FLAG_/$num_page/;
 my @sql_result=&SQL($SQL);
 $sms_text=$sql_result[0];
+$sms_dest=$sql_result[1];
 $SQL="SELECT X'$sms_text'";
 @sql_result=&SQL($SQL);
 &response('LOG','SMS-ENC-RESULT',"$sql_result[0]");
@@ -1140,12 +1144,15 @@ $sms_from=~s/\+//;
 &response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
 &response('LOG','SMS-SEND-PARAM',"'SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from");
 &response('LOG','SMS-SEND-CMD',"SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from)");
-#my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
-my $sms_result=1;
+my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
+#my $sms_result=1;
 $SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and flag like "%$num_page" and status=0];
 my $sql_update_result=&SQL($SQL);
 return $sms_result;
 }#if num_page==page
+else{#else multipage
+return 2;
+}#end else multipage
 	}#if insert
 	else{#else no insert
 return -1;
