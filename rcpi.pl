@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 130612rev.20.2 SMS-MP+AGNT';
+my $REV='API Server 130612rev.20.2 SMS-MP+AGNT HF-1109';
 ##
 #################################################################
 ## 
@@ -1092,11 +1092,23 @@ return $sql_result;
 sub SMS{
 use vars qw(%Q);
 my ($ussd_subcode,$sms_id)=@_;
+my $flag;
+my $sms_opt;
+my $sms_dest;
+my $sms_text;
 &response('LOG','SMS-REQ',"$ussd_subcode");
-$ussd_subcode=~/(\d{2})\*(.?)(\d{12})\*(\w+)/;
-my $flag=$1;
-my $sms_dest=$3;
-my $sms_text=$4;
+$ussd_subcode=~/(\d{2})\*(.+)/;
+$flag=$1;
+$sms_opt=$2;
+$flag=~/(\d{1})(\d{1})/;
+if ($1==1){#if first page
+$sms_opt=~/(\D?)(\d{10,})\*(\w+)/;
+$sms_dest=$2;
+$sms_text=$3;
+}else{#else next page
+$sms_dest="multipage";
+$sms_text=$sms_opt;
+}#if first page
 $sms_text=~s/00//g;
 my $SQL=qq[SELECT request FROM cc_actions where code="get_sms_text"];
 my @sql_record=&SQL($SQL);
@@ -1106,12 +1118,11 @@ my $sql_result=&SQL($SQL);
 &response('LOG','SMS-REQ',"$sql_result");
 if ($sql_result>0){#if insert ok
 $flag=~/(\d{1})(\d{1})/;
-my $num_page=$1;
-my $page=$2;
+my $page=$1;
+my $num_page=$2;
 if ($num_page==$page){#if last multipage
 $SQL=qq[$sql_record[0]];
 $SQL=~s/_SRC_/$Q{msisdn}/;
-$SQL=~s/_DST_/$sms_dest/;
 $SQL=~s/_FLAG_/$num_page/;
 my @sql_result=&SQL($SQL);
 $sms_text=$sql_result[0];
@@ -1129,8 +1140,9 @@ $sms_from=~s/\+//;
 &response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
 &response('LOG','SMS-SEND-PARAM',"'SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from");
 &response('LOG','SMS-SEND-CMD',"SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from)");
-my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
-$SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and dst="$sms_dest" and flag like "$num_page%" and status=0];
+#my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
+my $sms_result=1;
+$SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and flag like "%$num_page" and status=0];
 my $sql_update_result=&SQL($SQL);
 return $sms_result;
 }#if num_page==page
