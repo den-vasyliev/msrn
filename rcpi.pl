@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 130612rev.20 HF-128';
+my $REV='API Server 130612rev.20.1 SMS-MP';
 ##
 #################################################################
 ## 
@@ -1130,8 +1130,8 @@ $sms_from=~s/\+//;
 &response('LOG','SMS-SEND-PARAM',"'SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from");
 #$code,$query,$host,$msisdn,$message_code,$options,$options1
 &response('LOG','SMS-SEND-CMD',"SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from)");
-my $sms_result="1";
-#my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
+#my $sms_result="1";
+my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
 $SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and dst="$sms_dest" and flag like "$num_page%" and status=0];
 my $sql_update_result=&SQL($SQL);
 return $sms_result;
