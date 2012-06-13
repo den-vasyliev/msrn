@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 130612rev.20.1 SMS-MP';
+my $REV='API Server 130612rev.20.2 SMS-MP+AGNT';
 ##
 #################################################################
 ## 
