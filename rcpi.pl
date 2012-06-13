@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 020612rev.19.1 HF-128';
+my $REV='API Server 130612rev.20 HF-128';
 ##
 #################################################################
 ## 
@@ -300,7 +300,7 @@ print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=3;
 my $rv; 
 my $sth;
 our @result=();
-if($SQL!~m/^SELECT/i){
+if(($SQL!~m/^SELECT/i)&&($SQL!~m/^CALL/i)){
 $rv=$dbh->do($SQL);
 push @result,$rv;
 }
@@ -654,7 +654,7 @@ my $SMS_response='';
 switch ($SMS_result){
 	case 1 {#one message sent
 	$SMS_response="Your message was sent";
-	}#case 0
+	}#case 1
 	else{#unknown result
 	$SMS_response="UNKNOWN";
 	}#else
@@ -1095,15 +1095,27 @@ $ussd_subcode=~/(\d{2})\*(.?)(\d{12})\*(\w+)/;
 my $flag=$1;
 my $sms_dest=$3;
 my $sms_text=$4;
+$sms_text=~s/00//g;
+my $SQL=qq[SELECT request FROM cc_actions where code="get_sms_text"];
+my @sql_record=&SQL($SQL);
 &response('LOG','SMS-REQ',"$flag,$sms_dest");
-my $SQL=qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`text`) values ("$sms_id","$Q{msisdn}","$sms_dest","$flag","$sms_text")];
+$SQL=qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`text`) values ("$sms_id","$Q{msisdn}","$sms_dest","$flag","$sms_text")];
 my $sql_result=&SQL($SQL);
 &response('LOG','SMS-REQ',"$sql_result");
 if ($sql_result>0){#if insert ok
-switch ($flag){
-	case 11{#one message
-my $SQL=qq[SELECT X\'$sms_text\'];# ! sql
+$flag=~/(\d{1})(\d{1})/;
+my $num_page=$1;
+my $page=$2;
+if ($num_page==$page){#if last multipage
+$SQL=qq[$sql_record[0]];
+$SQL=~s/_SRC_/$Q{msisdn}/;
+$SQL=~s/_DST_/$sms_dest/;
+$SQL=~s/_FLAG_/$num_page/;
 my @sql_result=&SQL($SQL);
+$sms_text=$sql_result[0];
+my $sms_id=$sql_result[1];
+$SQL="SELECT X'$sms_text'";
+@sql_result=&SQL($SQL);
 &response('LOG','SMS-ENC-RESULT',"$sql_result[0]");
 my $gsm0338=encode("gsm0338", $sql_result[0]);    # loads Encode::GSM0338 implicitly
 &response('LOG','SMS-ENC-RESULT-GSM',"$gsm0338");
@@ -1117,20 +1129,17 @@ $sms_from=~s/\+//;
 &response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
 &response('LOG','SMS-SEND-PARAM',"'SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from");
 #$code,$query,$host,$msisdn,$message_code,$options,$options1
-my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
+&response('LOG','SMS-SEND-CMD',"SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from)");
+my $sms_result="1";
+#my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
+$SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and dst="$sms_dest" and flag like "$num_page%" and status=0];
+my $sql_update_result=&SQL($SQL);
 return $sms_result;
+}#if $1==$2
 	}#if insert
 	else{#else no insert
 return -1;
 	}#end else
-	}#case 11
-#
-	else{#multipage
-$flag=/(\d{1})(\d{1})/;	
-
-	return -1;
-	}#else
-}#end switch flag
 }# END sub USSD_SMS
 #
 &response('LOG','SOCKET',"CLOSE $new_sock ##################################################");
