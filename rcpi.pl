@@ -888,7 +888,9 @@ switch ($code){
 		my $resale_TID="$Q{transactionid}";
 		my $msrn=&SENDGET('SIG_GetMSRN',"$imsi");
 		&bill_resale($Q{auth_key},53);
-		print $new_sock &response('rc_api_cmd','OK',$resale_TID,"$msrn");
+		print $new_sock &response('rc_api_cmd','OK',$resale_TID,"$msrn") if $options ne 'cleartext';
+		$msrn=~s/\+// if $options eq 'cleartext';
+		print $new_sock $msrn if $options eq 'cleartext';
 		return 'CMD 1';
 		}#if auth
 		else{
