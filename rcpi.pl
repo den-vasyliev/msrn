@@ -1113,14 +1113,12 @@ $SQL=~s/_DST_/$sms_dest/;
 $SQL=~s/_FLAG_/$num_page/;
 my @sql_result=&SQL($SQL);
 $sms_text=$sql_result[0];
-my $sms_id=$sql_result[1];
 $SQL="SELECT X'$sms_text'";
 @sql_result=&SQL($SQL);
 &response('LOG','SMS-ENC-RESULT',"$sql_result[0]");
 my $gsm0338=encode("gsm0338", $sql_result[0]);    # loads Encode::GSM0338 implicitly
 &response('LOG','SMS-ENC-RESULT-GSM',"$gsm0338");
 my $utf8=decode("gsm0338", $gsm0338);
-$utf8=~s/\?//g;
 $utf8=uri_escape($utf8);
 &response('LOG','SMS-ENC-RESULT-UTF',"$utf8");
 $sms_text=$utf8;
@@ -1128,14 +1126,12 @@ my $sms_from=uri_unescape($Q{msisdn});
 $sms_from=~s/\+//;
 &response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
 &response('LOG','SMS-SEND-PARAM',"'SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from");
-#$code,$query,$host,$msisdn,$message_code,$options,$options1
 &response('LOG','SMS-SEND-CMD',"SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from)");
-#my $sms_result="1";
 my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
 $SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and dst="$sms_dest" and flag like "$num_page%" and status=0];
 my $sql_update_result=&SQL($SQL);
 return $sms_result;
-}#if $1==$2
+}#if num_page==page
 	}#if insert
 	else{#else no insert
 return -1;
