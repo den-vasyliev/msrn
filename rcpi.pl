@@ -1070,8 +1070,7 @@ $SQL_T_result=&SQL($SQL);
 &response('LOG','PAYMNT-TR-SQL-RESULT',"$SQL_T_result");
 if ($REQUEST->{payment}{transactions}{transaction}{$tr}{type}==11){#if debited transaction
 my $amount=$REQUEST->{payment}{transactions}{transaction}{$tr}{amount}/$rate;
-my $trid=$REQUEST->{payment}{transactions}{transaction}{$tr}{code};
-$SQL=qq[INSERT into `msrn`.`cc_epayment_log` (`amount`, `paymentmethod`, `cardid`, `cc_owner`) values ( "round($amount,2)", "$mch_name", '(select id from cc_card where username="$CARD_NUMBER")',"$trid")];
+$SQL=qq[INSERT into `msrn`.`cc_epayment_log` (`amount`, `paymentmethod`, `cardid`, `cc_owner`) values ( round($amount,2), "$mch_name", (select id from cc_card where username="$CARD_NUMBER"),"$tr")];
 my $SQL_debit_result=&SQL($SQL);
 &response('LOG','PAYMNT-TR-DEBIT-SQL-RESULT',"$SQL_debit_result");
 }#end if debited
