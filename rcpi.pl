@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 140612rev.21.5 SMS_MP_ENC';
+my $REV='API Server 140612rev.21.6 DATA';
 ##
 #################################################################
 ## 
@@ -119,12 +119,15 @@ my $IN_SET='';
 $IN_SET="$XML_KEYS{msisdn}:$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}" if  $XML_KEYS{msisdn};
 $IN_SET=$IN_SET.":$XML_KEYS{code}:$XML_KEYS{sub_code}" if $XML_KEYS{code};
 $IN_SET=$IN_SET."$XML_KEYS{ident}:$XML_KEYS{amount}" if $XML_KEYS{salt};
+$IN_SET=$IN_SET."$XML_KEYS{TotalCurrentByteLimit}" if $XML_KEYS{SessionID};
+$XML_KEYS{transactionid}=$XML_KEYS{SessionID} if $XML_KEYS{SessionID};
+$XML_KEYS{imsi}=$XML_KEYS{GlobalIMSI} if $XML_KEYS{SessionID};
 &response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'IN',$IN_SET);
 my $LU_H_result=&LU_H;
 &response('LOG','MAIN-LU-H-RETURN',"$LU_H_result");
 #Get action type
 my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});
-eval {
+eval {#save subref
 	our $subref=\&$ACTION_TYPE_RESULT;
 	};warn $@ if $@;  &response('LOG',"MAIN-ACTION-SUBREF","ERROR $ACTION_TYPE_RESULT") if $@;
 &response('LOG','MAIN-GET_TYPE',$ACTION_TYPE_RESULT);
@@ -142,7 +145,10 @@ case 3 {
 	print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT URI')}
 else {#else case action_type_result
 	use vars qw($subref);
-	my $ACTION_RESULT=&$subref($XML_KEYS{imsi});
+eval {#save subroutine
+	our $ACTION_RESULT=&$subref($XML_KEYS{imsi});
+};warn $@ if $@;  &response('LOG',"MAIN-ACTION-SUBREF","ERROR $ACTION_TYPE_RESULT") if $@;
+	use vars qw($ACTION_RESULT);
 	if($ACTION_RESULT){
 	&response('LOG',"MAIN-ACTION-RESULT-$ACTION_TYPE_RESULT","$ACTION_RESULT");
 	}#if ACTION RESULT
@@ -340,7 +346,8 @@ my	$XML=$sql_record[0];
 my	($ROOT,$SUB0,$SUB1)=split('::',$XML);
 my $now = localtime;
 if($RESPONSE_TYPE eq 'OK'){
-my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0><$SUB1>$MESSAGE1</$SUB1></$ROOT>\n];
+my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0><$SUB1>$MESSAGE1</$SUB1></$ROOT>\n] if ($MESSAGE1);;
+	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0></$ROOT>\n] if (!$MESSAGE1);
 	my $LOG="[$now]-[API-RESPONSE-SENT]: $OK\n"; 
 	print LOGFILE $LOG if $debug<=4;
 	print $LOG if $debug>=3; 
@@ -632,7 +639,7 @@ return "USSD 0";
 &response('LOG','MOC-SIG-USSD-MYNUMBER-REQUEST',"$ussd_code");
 &response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
 my $number=uri_unescape("$Q{msisdn}");
-print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Your Number: $number. Your Personal Code: $sub_cid");
+print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Your Number: $number Your Personal Code: $sub_cid");
 return "USSD 0";
 	}#case 100
 ###
@@ -1158,6 +1165,11 @@ return -1;
 	}#end else
 }# END sub USSD_SMS
 #
+### sub DataAUTH
+sub DataAUTH{
+print $new_sock &response('DataAUTH','OK',1);
+}# end sub DataAUTH
+
 &response('LOG','SOCKET',"CLOSE $new_sock ##################################################");
 $new_sock->shutdown(2);
 ################################################################
