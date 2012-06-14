@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 140612rev.21.1 HF_1109';
+my $REV='API Server 140612rev.21.2 HFX_635';
 ##
 #################################################################
 ## 
@@ -632,7 +632,7 @@ return "USSD 0";
 &response('LOG','MOC-SIG-USSD-MYNUMBER-REQUEST',"$ussd_code");
 &response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
 my $number=uri_unescape("$Q{msisdn}");
-print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Your Number: $number");
+print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Your Number: $number. Your Personal Code: $sub_cid");
 return "USSD 0";
 	}#case 100
 ###
