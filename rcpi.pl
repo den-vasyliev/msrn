@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 140612rev.21.4 SMS_MP_ENC';
+my $REV='API Server 140612rev.21.5 SMS_MP_ENC';
 ##
 #################################################################
 ## 
@@ -1131,27 +1131,20 @@ my $page=$1;
 my $num_page=$2;
 if ($num_page==$page){#if last multipage
 $SQL=qq[$sql_record[0]];
-$SQL=~s/_SRC_/$Q{msisdn}/;
-$SQL=~s/_FLAG_/$num_page/;
+$SQL=~s/_SRC_/$Q{msisdn}/g;
+$SQL=~s/_FLAG_/$num_page/g;
 my @sql_result=&SQL($SQL);
 $sms_text=$sql_result[0];
 $sms_dest=$sql_result[1];
-#$SQL="SELECT X'$sms_text'";
-#@sql_result=&SQL($SQL);
 &response('LOG','SMS-ENC-RESULT',"$sms_text");
-my $gsm0338=encode("gsm0338", $sql_result[0]);    # loads Encode::GSM0338 implicitly
-&response('LOG','SMS-ENC-RESULT-GSM',"$gsm0338");
-my $utf8=decode("gsm0338", $gsm0338);
-$utf8=uri_escape($utf8);
-&response('LOG','SMS-ENC-RESULT-UTF',"$utf8");
-$sms_text=$utf8;
+$sms_text=uri_escape($sms_text);
 my $sms_from=uri_unescape($Q{msisdn});
 $sms_from=~s/\+//;
 &response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
 &response('LOG','SMS-SEND-PARAM',"'SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from");
 &response('LOG','SMS-SEND-CMD',"SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from)");
-#my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from);
-my $sms_result=1;
+my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',"$sms_text",$sms_from);
+#my $sms_result=1;
 $SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and flag like "%$num_page" and status=0];
 my $sql_update_result=&SQL($SQL);
 return $sms_result;
