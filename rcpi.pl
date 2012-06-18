@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 140612rev.21.6 DATA';
+my $REV='API Server 180612rev.22.0 HFX-1073-1079';
 ##
 #################################################################
 ## 
@@ -1065,19 +1065,20 @@ my $SQL_P_result=&SQL($SQL);
 &response('LOG','PAYMNT-EPMTS-SQL-RESULT',"$SQL_P_result");
 ## AUTH
 &response('LOG','PAYMNT-AUTH-REQ',"$REQUEST->{payment}{salt},PAYMNT,$REMOTE_HOST,-sha512,$REQUEST->{payment}{sign}");
-if (&auth($REQUEST->{payment}{salt},'PAYMNT',$REMOTE_HOST,"-sha512",$REQUEST->{payment}{sign})==0){
+if (&auth($REQUEST->{payment}{salt},'PAYMNT',$REMOTE_HOST,"-sha512",$REQUEST->{payment}{sign})!=0){
 &response('LOG','PAYMNT-TR-RESULT',"@TR");
 use vars qw($rate $mch_name);
 foreach my $tr (@TR){
-$REQUEST->{payment}{transactions}{transaction}{$tr}{info}=~m/(\w?):(.*)}/;
+$REQUEST->{payment}{transactions}{transaction}{$tr}{info}=~s/"//g; #"
+$REQUEST->{payment}{transactions}{transaction}{$tr}{info}=~/{(.*):(.*),(.*):(.*)}/;;
 my $CARD_NUMBER=$2;
 my $SQL='';
 $SQL=qq[INSERT INTO cc_epayments_transactions (`id`,`mch_id`, `srv_id`,`amount`,`currency`,`type`,`status`,`code`, `desc`,`info`) values("$tr","$REQUEST->{payment}{transactions}{transaction}{$tr}{mch_id}","$REQUEST->{payment}{transactions}{transaction}{$tr}{srv_id}","$REQUEST->{payment}{transactions}{transaction}{$tr}{amount}","$REQUEST->{payment}{transactions}{transaction}{$tr}{currency}","$REQUEST->{payment}{transactions}{transaction}{$tr}{type}","$REQUEST->{payment}{transactions}{transaction}{$tr}{status}","$REQUEST->{payment}{transactions}{transaction}{$tr}{code}","$REQUEST->{payment}{transactions}{transaction}{$tr}{desc}","$CARD_NUMBER")];
 $SQL_T_result=&SQL($SQL);
 &response('LOG','PAYMNT-TR-SQL-RESULT',"$SQL_T_result");
-if ($REQUEST->{payment}{transactions}{transaction}{$tr}{type}==11){#if debited transaction
+if (($REQUEST->{payment}{transactions}{transaction}{$tr}{type}==11)&&($SQL_T_result>0)){#if debited transaction
 my $amount=$REQUEST->{payment}{transactions}{transaction}{$tr}{amount}/$rate;
-$SQL=qq[INSERT into `msrn`.`cc_epayment_log` (`amount`, `paymentmethod`, `cardid`, `cc_owner`) values ( round($amount,2), "$mch_name", (select id from cc_card where username="$CARD_NUMBER"),"$tr")];
+$SQL=qq[INSERT into `msrn`.`cc_epayment_log` (`amount`, `paymentmethod`, `cardid`, `cc_owner`) values ( round($amount,3), "$mch_name", (select id from cc_card where username="$CARD_NUMBER"),"$tr")];
 my $SQL_debit_result=&SQL($SQL);
 &response('LOG','PAYMNT-TR-DEBIT-SQL-RESULT',"$SQL_debit_result");
 }#end if debited
