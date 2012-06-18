@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 180612rev.22.1 HFX-1037-1073-1079';
+my $REV='API Server 180612rev.22.3 HFX-349';
 ##
 #################################################################
 ## 
@@ -346,8 +346,8 @@ my	$XML=$sql_record[0];
 my	($ROOT,$SUB0,$SUB1)=split('::',$XML);
 my $now = localtime;
 if($RESPONSE_TYPE eq 'OK'){
-my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0><$SUB1>$MESSAGE1</$SUB1></$ROOT>\n] if ($MESSAGE1);;
-	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0></$ROOT>\n] if (!$MESSAGE1);
+my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0><$SUB1>$MESSAGE1</$SUB1></$ROOT>\n] if ($MESSAGE1 ne '');;
+	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0></$ROOT>\n] if ($MESSAGE1 eq '');
 	my $LOG="[$now]-[API-RESPONSE-SENT]: $OK\n"; 
 	print LOGFILE $LOG if $debug<=4;
 	print $LOG if $debug>=3; 
