@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 180612rev.22.0 HFX-1073-1079';
+my $REV='API Server 180612rev.22.1 HFX-1037-1073-1079';
 ##
 #################################################################
 ## 
@@ -1016,7 +1016,7 @@ my $sql_result=&SQL($SQL);
 sub auth{
 use vars qw(%Q $REMOTE_HOST);
 my ($KEY,$type,$agent,$dgst,$ikey)=@_;
-my $md5=qq[echo '_KYES_' |/usr/bin/openssl dgst $dgst];
+my $md5=qq[echo _KYES_ |/usr/bin/openssl dgst $dgst];
 my $md5_result='';
 our ($reseller_name,$public_key,$auth_key);
 &response('LOG',"RC-API-$type-AUTH","$REMOTE_HOST:$agent:$KEY:$dgst");
@@ -1031,8 +1031,10 @@ $md5=~s/_KYES_/$REMOTE_HOST$reseller_name$public_key/;
 	case "PAYMNT"{#paymnt auth
 my $SQL=qq[SELECT name, auth_key, rate from cc_epaymnter where host="$agent"];
 my @sql_record=&SQL($SQL);
+#$md5=qq[echo -n '_KYES_' |/usr/bin/openssl dgst $dgst];
 (our $mch_name, my $auth_key, our $rate)=@sql_record;
-$md5=~s/_KYES_/$KEY$auth_key/;
+$md5=~s/_KYES_/-n $KEY/;
+$md5="$md5 $auth_key";
 }#case paymnt
 else{
 &response('LOG',"RC-API-AUTH-RETURNED","Error: UNKNOWN TYPE $type");
@@ -1065,7 +1067,7 @@ my $SQL_P_result=&SQL($SQL);
 &response('LOG','PAYMNT-EPMTS-SQL-RESULT',"$SQL_P_result");
 ## AUTH
 &response('LOG','PAYMNT-AUTH-REQ',"$REQUEST->{payment}{salt},PAYMNT,$REMOTE_HOST,-sha512,$REQUEST->{payment}{sign}");
-if (&auth($REQUEST->{payment}{salt},'PAYMNT',$REMOTE_HOST,"-sha512",$REQUEST->{payment}{sign})!=0){
+if (&auth($REQUEST->{payment}{salt},'PAYMNT',$REMOTE_HOST,"-sha512 -hmac",$REQUEST->{payment}{sign})==0){
 &response('LOG','PAYMNT-TR-RESULT',"@TR");
 use vars qw($rate $mch_name);
 foreach my $tr (@TR){
