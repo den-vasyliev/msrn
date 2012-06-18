@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 180612rev.22.3 HFX-349';
+my $REV='API Server 180612rev.22.3 HFX-920';
 ##
 #################################################################
 ## 
@@ -875,7 +875,7 @@ return 0;
 ## Accept CMD, Options
 ## Return message
 #################################################################
-sub rc_api_cmd{
+	sub rc_api_cmd{
 my $code;
 my $sub_code;
 my $options;
@@ -917,7 +917,7 @@ switch ($code){
 		$SQL="$sql_record[0]";
 		$SQL=~s/_FROMDEST_/$Q{msisdn}/ if $sub_code==71;
 		$SQL=~s/_TODEST_/$Q{options}/ if $sub_code==71;
-		$SQL=~s/_CARD_/$Q{card_number}/ if $sub_code==76;
+		$SQL=~s/_CARD_/$Q{card_number}/ if (($sub_code==76)&&($Q{card_number}=~/^\d{10}$/));
 		$SQL=~s/_RESELLER_/$Q{reseller}/ if $sub_code==77;
 		$SQL=~s/_TYPE_/$Q{options}/ if $sub_code==77;
 		@sql_record=&SQL($SQL);
