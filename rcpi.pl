@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 180612rev.22.3 HFX-920';
+my $REV='API Server 190612rev.23.1 MO-MT-SMS';
 ##
 #################################################################
 ## 
@@ -343,10 +343,11 @@ if($ACTION_TYPE!~m/^LO/){
 	my @sql_record=&SQL($SQL);
 my	$XML=$sql_record[0];
 	#CDR_RESPONSE::CDR_ID::CDR_STATUS MOC_response::TRANSACTION_ID::DISPLAY_MESSAGE
-my	($ROOT,$SUB0,$SUB1)=split('::',$XML);
+my	($ROOT,$SUB0,$SUB1,$SUB2)=split('::',$XML);
 my $now = localtime;
 if($RESPONSE_TYPE eq 'OK'){
-my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0><$SUB1>$MESSAGE1</$SUB1></$ROOT>\n] if ($MESSAGE1 ne '');;
+my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0><$SUB1>$MESSAGE1</$SUB1><$SUB2>$MESSAGE2</$SUB2></$ROOT>\n] if ($MESSAGE2 ne '');
+	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0><$SUB1>$MESSAGE1</$SUB1></$ROOT>\n] if (($MESSAGE1 ne '')&&($MESSAGE2 eq ''));
 	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0></$ROOT>\n] if ($MESSAGE1 eq '');
 	my $LOG="[$now]-[API-RESPONSE-SENT]: $OK\n"; 
 	print LOGFILE $LOG if $debug<=4;
@@ -959,14 +960,14 @@ my ($auth_key,$cgi)=@sql_record;
 
 if (($auth_key)&&($cgi)){
 switch ($req_type){
-	case 'LU'{
+	case 'LU'{#LU_CDR request
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'REQ',"RESALE $resale");
 		my $SENDGET_result=&SENDGET('SIG_SendResale',$imsi,$cgi,'','73',$options,$options1);
 		&bill_resale($resale,73);
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'RSP',"RESALE $SENDGET_result");
 		return $SENDGET_result;# OK or <error code>
 		}#case LU
-	case 'CB'{
+	case 'CB'{#CallBack request
 		&response('LOG','RESALE-REQUEST-TYPE',"$req_type $imsi,$cgi,,74,$options");
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'REQ',"RESALE $resale");
 		my $SENDGET_result=&SENDGET('SIG_SendResale',$imsi,$cgi,'','74',$options);
@@ -975,7 +976,7 @@ switch ($req_type){
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'RSP',"RESALE $SENDGET_result");
 		return $SENDGET_result;# OK or <error code>
 		}#case CB
-	case 'UD'{
+	case 'UD'{#USSD reuqest
 		&response('LOG','RESALE-REQUEST-TYPE',"$req_type $imsi,$cgi,'','75',$options,$options1");
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'REQ',"RESALE $resale");
 		#$code,$query,$host,$msisdn,$message_code,$options,$options1
@@ -984,7 +985,7 @@ switch ($req_type){
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'RSP',"RESALE $SENDGET_result");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$SENDGET_result");
 		return $SENDGET_result;# OK or <error code>
-		}#case CB
+		}#case USSD
 	else {
 		&response('LOG','RESALE-REQUEST-TYPE',"UNKNOWN $req_type");
 		}#else
@@ -1172,7 +1173,35 @@ return -1;
 sub DataAUTH{
 print $new_sock &response('DataAUTH','OK',1);
 }# end sub DataAUTH
-
+#
+###
+## SMS section
+### sub MO_SMS
+sub MO_SMS{
+use vars qw(%Q);
+print $new_sock &response('MO_SMS','OK',$Q{transactionid},1,'RuimTools');
+}#end sub MO_SMS
+#
+### sub MO_SMS
+sub MT_SMS{
+use vars qw(%Q);
+print $new_sock &response('MT_SMS','OK',$Q{transactionid},1);
+}#end sub MT_SMS
+#
+sub MOSMS_CDR{
+	&response('LOG','MOSMS_CDR',1);
+}#end sub MOSMS_CDR
+sub MTSMS_CDR{
+	&response('LOG','MTSMS_CDR',1);
+}#end sub MTSMS_CDR
+#
+sub SMSContent_CDR{
+	&response('LOG','SMSContent_CDR',1);
+	print $new_sock &response('MT_SMS','OK',$Q{transactionid},1);
+}#end sub SMSContent_CDR
+#
+# end SMS section
+#########
 &response('LOG','SOCKET',"CLOSE $new_sock ##################################################");
 $new_sock->shutdown(2);
 ################################################################
