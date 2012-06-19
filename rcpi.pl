@@ -1180,6 +1180,7 @@ print $new_sock &response('DataAUTH','OK',1);
 sub MO_SMS{
 use vars qw(%Q);
 print $new_sock &response('MO_SMS','OK',$Q{transactionid},1,'RuimTools');
+&response('LOGDB','MO_SMS',$Q{transactionid},$Q{imsi},'RSP',"RuimTools 1");
 }#end sub MO_SMS
 #
 ### sub MO_SMS
