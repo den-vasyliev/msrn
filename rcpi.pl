@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 190612rev.23.1 MO-MT-SMS';
+my $REV='API Server 200612rev.24.2';
 ##
 #################################################################
 ## 
@@ -123,7 +123,7 @@ $IN_SET=$IN_SET."$XML_KEYS{TotalCurrentByteLimit}" if $XML_KEYS{SessionID};
 $XML_KEYS{transactionid}=$XML_KEYS{SessionID} if $XML_KEYS{SessionID};
 $XML_KEYS{imsi}=$XML_KEYS{GlobalIMSI} if $XML_KEYS{SessionID};
 &response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'IN',$IN_SET);
-my $LU_H_result=&LU_H;
+my $LU_H_result=&LU_H;#track sim card LU history
 &response('LOG','MAIN-LU-H-RETURN',"$LU_H_result");
 #Get action type
 my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});
@@ -876,7 +876,7 @@ return 0;
 ## Accept CMD, Options
 ## Return message
 #################################################################
-	sub rc_api_cmd{
+sub rc_api_cmd{
 my $code;
 my $sub_code;
 my $options;
@@ -898,7 +898,7 @@ switch ($code){
 		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_MSRN $code $Q{auth_key}");
 		my $resale_TID="$Q{transactionid}";
 		my $msrn=&SENDGET('SIG_GetMSRN',"$imsi");
-		&bill_resale($Q{auth_key},53);
+		&bill_resale($Q{auth_key},53);#53 SIG_GetMSRN id --needs to switch to code
 		print $new_sock &response('rc_api_cmd','OK',$resale_TID,"$msrn") if $options ne 'cleartext';
 		$msrn=~s/\+// if $options eq 'cleartext';
 		print $new_sock $msrn if $options eq 'cleartext';
@@ -916,14 +916,14 @@ switch ($code){
 		my $SQL=qq[SELECT request from cc_actions where id="$sub_code"];
 		my @sql_record=&SQL($SQL);
 		$SQL="$sql_record[0]";
-		$SQL=~s/_FROMDEST_/$Q{msisdn}/ if $sub_code==71;
-		$SQL=~s/_TODEST_/$Q{options}/ if $sub_code==71;
-		$SQL=~s/_CARD_/$Q{card_number}/ if (($sub_code==76)&&($Q{card_number}=~/^\d{10}$/));
-		$SQL=~s/_RESELLER_/$Q{reseller}/ if $sub_code==77;
-		$SQL=~s/_TYPE_/$Q{options}/ if $sub_code==77;
+		$SQL=~s/_FROMDEST_/$Q{msisdn}/ if $sub_code==71;#Get Rate to Dest get_rate
+		$SQL=~s/_TODEST_/$Q{options}/ if $sub_code==71;#Get Rate to Dest get_rate
+		$SQL=~s/_CARD_/$Q{card_number}/ if (($sub_code==76)&&($Q{card_number}=~/^\d{10}$/));#Get CardNumber get_card_number
+		$SQL=~s/_RESELLER_/$Q{reseller}/ if $sub_code==77;#Get Resellers MSRN count get_resale_msrn
+		$SQL=~s/_TYPE_/$Q{options}/ if $sub_code==77;#Get Resellers MSRN count get_resale_msrn
 		@sql_record=&SQL($SQL);
 		my $stat_result=$sql_record[0];
-		$stat_result=substr($stat_result,0,6) if $sub_code==71;
+		$stat_result=substr($stat_result,0,6) if $sub_code==71;#Get Rate to Dest get_rate
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$stat_result");
 		&response('LOG','RC-API-CMD-STAT',"$stat_result");
 		return 'CMD 2';
@@ -963,7 +963,7 @@ switch ($req_type){
 	case 'LU'{#LU_CDR request
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'REQ',"RESALE $resale");
 		my $SENDGET_result=&SENDGET('SIG_SendResale',$imsi,$cgi,'','73',$options,$options1);
-		&bill_resale($resale,73);
+		&bill_resale($resale,73);#Send LU to Resaler
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'RSP',"RESALE $SENDGET_result");
 		return $SENDGET_result;# OK or <error code>
 		}#case LU
@@ -971,7 +971,7 @@ switch ($req_type){
 		&response('LOG','RESALE-REQUEST-TYPE',"$req_type $imsi,$cgi,,74,$options");
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'REQ',"RESALE $resale");
 		my $SENDGET_result=&SENDGET('SIG_SendResale',$imsi,$cgi,'','74',$options);
-		&bill_resale($resale,74);
+		&bill_resale($resale,74);#Send CB to Resaler
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$SENDGET_result");
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'RSP',"RESALE $SENDGET_result");
 		return $SENDGET_result;# OK or <error code>
@@ -981,7 +981,7 @@ switch ($req_type){
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'REQ',"RESALE $resale");
 		#$code,$query,$host,$msisdn,$message_code,$options,$options1
 		my $SENDGET_result=&SENDGET('SIG_SendResale',$imsi,$cgi,'','75',$options,$options1);
-		&bill_resale($resale,75);
+		&bill_resale($resale,75);#Send USSD to Resaler
 		&response('LOGDB',"$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'RSP',"RESALE $SENDGET_result");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$SENDGET_result");
 		return $SENDGET_result;# OK or <error code>
@@ -1202,6 +1202,16 @@ sub SMSContent_CDR{
 #
 # end SMS section
 #########
+#
+sub msisdn_allocation{
+use vars qw(%Q);
+my $SQL=qq[UPDATE cc_card set phone="$Q{MSISDN}" where useralias=$Q{IMSI} or firstname=$Q{IMSI}];
+my $sql_result=&SQL($SQL);
+print $new_sock &response('msisdn_allocation','OK',$Q{transactionid},$sql_result);
+&response('LOG','msisdn_allocation',$sql_result);
+&response('LOGDB','msisdn_allocation',1,$Q{IMSI},'RSP',"$Q{MSISDN} $sql_result");	
+}#end sub msisdn_allocation
+#
 &response('LOG','SOCKET',"CLOSE $new_sock ##################################################");
 $new_sock->shutdown(2);
 ################################################################
