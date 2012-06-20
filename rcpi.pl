@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 200612rev.24.2';
+my $REV='API Server 210612rev.25.0';
 ##
 #################################################################
 ## 
@@ -739,10 +739,17 @@ print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Sorry, num
 return "USSD $SQL_result";
 }else{ #if number length
 &response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'RSP',"Error: Incorrect number $2");
-print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Incorrect number $2. Please use format: 380 XX XXX XXXX");
+print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Incorrect number $2. Please use format: +380 XX XXX XXXX");
 return 'USSD -1';
 }#end else if number length
 	}#case 127
+###
+case "128"{#balance request
+&response('LOG','MOC-SIG-USSD-RATES-REQUEST',"$ussd_code");
+&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
+print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please wait sms with rate list for your location");
+return 'USSD 0';
+	}#case 128
 ###
 else{#switch ussd code
 &response('LOG','MOC-SIG-USSD-UNKNOWN-REQUEST',"$ussd_code");
