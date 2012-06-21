@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 210612rev.25.0';
+my $REV='API Server 210612rev.25.1';
 ##
 #################################################################
 ## 
@@ -335,7 +335,7 @@ if($rv){
 sub response{
 #	
 my $now = localtime;
-open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log') or die $!;
+open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log');
 #
 my ($ACTION_TYPE,$RESPONSE_TYPE,$MESSAGE0,$MESSAGE1,$MESSAGE2,$MESSAGE3)=@_;
 if($ACTION_TYPE!~m/^LO/){
@@ -819,7 +819,7 @@ $message=uri_escape($message) if $code ne 'SIG_SendResale';
 #
 switch ($code){
 	case "SIG_GetMSRN" {
-		$msrn=&reuse_msrn($query) if $options eq '126';
+		$msrn=&reuse_msrn($query) if $options eq '126';#code 126 checks is not safety 
 		&response('LOG',"$code-REUSE-GET","$msrn");
 		$URL=qq[transaction_id=$transaction_id&query=$query&$URL_QUERY&timestamp=$timestamp] if $msrn==0;
 		&response('LOG',"$code-URL-SET","$URL");
@@ -907,7 +907,7 @@ switch ($code){
 		my $msrn=&SENDGET('SIG_GetMSRN',"$imsi");
 		&bill_resale($Q{auth_key},53);#53 SIG_GetMSRN id --needs to switch to code
 		print $new_sock &response('rc_api_cmd','OK',$resale_TID,"$msrn") if $options ne 'cleartext';
-		$msrn=~s/\+// if $options eq 'cleartext';
+		$msrn=~s/\+// if $options eq 'cleartext';#cleartext for ${EXTEN} usage
 		print $new_sock $msrn if $options eq 'cleartext';
 		return 'CMD 1';
 		}#if auth
