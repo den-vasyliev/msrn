@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 210612rev.25.1';
+my $REV='API Server 220612rev.26.0';
 ##
 #################################################################
 ## 
@@ -116,6 +116,8 @@ my $qkeys= keys %XML_KEYS;
 &response('LOG','MAIN-XML-PARSE-RETURN',$qkeys);
 if ($qkeys){#if kyes>0
 my $IN_SET='';
+our $INNER_TID;
+$INNER_TID=int(rand(1000000));
 $IN_SET="$XML_KEYS{msisdn}:$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}" if  $XML_KEYS{msisdn};
 $IN_SET=$IN_SET.":$XML_KEYS{code}:$XML_KEYS{sub_code}" if $XML_KEYS{code};
 $IN_SET=$IN_SET."$XML_KEYS{ident}:$XML_KEYS{amount}" if $XML_KEYS{salt};
@@ -368,7 +370,8 @@ print LOGFILE $LOG;
 print $LOG if $debug>=3;
 }#ACTION TYPE LOG
 elsif($ACTION_TYPE eq 'LOGDB'){
-my $SQL=qq[INSERT INTO cc_transaction (`id`,`type`,`transaction_id`,`IMSI`,`status`,`info`) values(NULL,"$RESPONSE_TYPE","$MESSAGE0","$MESSAGE1","$MESSAGE2","$MESSAGE3")];
+use vars qw($INNER_TID);
+my $SQL=qq[INSERT INTO cc_transaction (`id`,`type`,`inner_tid`,`transaction_id`,`IMSI`,`status`,`info`) values(NULL,"$RESPONSE_TYPE",$INNER_TID,"$MESSAGE0","$MESSAGE1","$MESSAGE2","$MESSAGE3")];
 	&SQL($SQL) if $debug<=3;
 	my $LOG='';
 	$LOG="[$now]-[API-LOGDB]: $SQL\n" if $debug==4;
