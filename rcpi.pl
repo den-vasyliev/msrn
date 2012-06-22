@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 220612rev.26.1 HFX_120';
+my $REV='API Server 220612rev.26.2 HFX_120-807';
 ##
 #################################################################
 ## 
@@ -803,13 +803,14 @@ use vars qw($curl);
 #
 my $URL='';
 my $msrn=0;
-our $transaction_id=timelocal(localtime());
+my $time=timelocal(localtime());
+our $transaction_id=$time.int(rand(1000));
 my ($code,$query,$host,$msisdn,$message_code,$options,$options1)=@_;
 #
 #$host='http://127.0.0.1/cgi-bin/get.cgi?' if !$host;
 $host='http://api2.globalsimsupport.com/WebAPI/C9API.aspx?' if !$host;
 #
-my $SQL=qq[SELECT request, from_unixtime($transaction_id) FROM cc_actions where code="$code"];
+my $SQL=qq[SELECT request, from_unixtime($time) FROM cc_actions where code="$code"];
 my @sql_record=&SQL($SQL);
 #
 my $URL_QUERY=$sql_record[0];
