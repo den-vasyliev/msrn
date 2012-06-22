@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 220612rev.26.0';
+my $REV='API Server 220612rev.26.1 HFX_120';
 ##
 #################################################################
 ## 
@@ -19,6 +19,7 @@ use URI::Escape;
 use Switch;
 use POSIX;
 use Time::Local;
+use Time::HiRes qw(gettimeofday);
 use IO::File;
 use Encode;
 use warnings;
@@ -117,7 +118,8 @@ my $qkeys= keys %XML_KEYS;
 if ($qkeys){#if kyes>0
 my $IN_SET='';
 our $INNER_TID;
-$INNER_TID=int(rand(1000000));
+my ($s, $usec) = gettimeofday();
+$INNER_TID=$s.$usec;
 $IN_SET="$XML_KEYS{msisdn}:$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}" if  $XML_KEYS{msisdn};
 $IN_SET=$IN_SET.":$XML_KEYS{code}:$XML_KEYS{sub_code}" if $XML_KEYS{code};
 $IN_SET=$IN_SET."$XML_KEYS{ident}:$XML_KEYS{amount}" if $XML_KEYS{salt};
