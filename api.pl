@@ -19,7 +19,7 @@ $LOGFILE='/opt/ruimtools/log/api.log';
 $now = localtime;
 #
 my $sock = new IO::Socket::INET (PeerAddr => $HOST,PeerPort => $PORT,Proto => 'tcp',);
-die "Could not create socket: $!\n" unless $sock;#generate error 500 if rcpi not reacheble
+die "Could not create socket: $!\n" unless $sock;#generate error 500 if rcpi not reachable
 #
 print "Content-Type: text/xml\n\n";
 #
