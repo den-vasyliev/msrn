@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 230612rev.27.7 PMNT MSG';
+my $REV='API Server 230612rev.27.11 SMS CDR';
 ##
 #################################################################
 ## 
@@ -306,33 +306,38 @@ return $Q{request_type};
 ## Accept SQL input
 ## Return SQL records or mysql error
 #################################################################
-sub SQL{ 
+	sub SQL{ 
 my $SQL=qq[@_];
 my $now = localtime;
 open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log') or die $! if $debug>=2;
 print LOGFILE "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=2; #DONT CALL VIA &RESPONSE
 print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=3;
-
-my $rv; 
-my $sth;
+#
+my ($rc, $sth);
 our (@result, $new_id);
-if($SQL!~m/^SELECT/i){
-$rv=$dbh->do($SQL);
-push @result,$rv;
-$new_id = $dbh -> {'mysql_insertid'};
-}
-else{
-$sth=$dbh->prepare($SQL);
-$rv=$sth->execute;
-@result=$sth->fetchrow_array;
-$sth->finish();
-}
-if($rv){
-	our $sql_aff_rows =$rv;
-	my $sql_record = @result;
-	&response('LOG','SQL-MYSQL-RETURNED',"@result $rv $new_id");
+#
+@result=();
+if($SQL!~m/^SELECT/i){#INSERT/UPDATE request
+&response('LOG','SQL-MYSQL-GET','DO') if $debug>3;
+	$rc=$dbh->do($SQL);#result code
+	push @result,$rc;#result array
+	$new_id = $dbh -> {'mysql_insertid'};#autoincrement id
+}#if SQL INSERT UPDATE
+else{#SELECT request
+&response('LOG','SQL-MYSQL-GET','EXEC') if $debug>3;
+	$sth=$dbh->prepare($SQL);
+	$rc=$sth->execute;#result code
+	@result=$sth->fetchrow_array;
+	$sth->finish();
+}#else SELECT
+#
+if($rc){#if result code
+	our $sql_aff_rows =$rc;
+	#my $sql_record = @result;
+	&response('LOG','SQL-MYSQL-RETURNED',"@result $rc $new_id");
 	return @result; 
-	}else{
+}#if result code
+else{#if no result code
 	&response('LOG','SQL-MYSQL-RETURNED','Error');
 	return -1;
 }#else MYSQL ERROR
@@ -348,25 +353,25 @@ sub response{
 my $now = localtime;
 open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log');
 #
-my ($ACTION_TYPE,$RESPONSE_TYPE,$MESSAGE0,$MESSAGE1,$MESSAGE2,$MESSAGE3)=@_;
+my ($ACTION_TYPE,$RESPONSE_TYPE,$RONE,$RSEC,$RTHI,$RFOUR)=@_;
 if($ACTION_TYPE!~m/^LO/){
 	my $SQL=qq[SELECT response FROM cc_actions where code="$ACTION_TYPE"];
 	my @sql_record=&SQL($SQL);
 my	$XML=$sql_record[0];
 	#CDR_RESPONSE::CDR_ID::CDR_STATUS MOC_response::TRANSACTION_ID::DISPLAY_MESSAGE
-my	($ROOT,$SUB0,$SUB1,$SUB2)=split('::',$XML);
+my	($ROOT,$SUB1,$SUB2,$SUB3)=split('::',$XML);
 my $now = localtime;
 if($RESPONSE_TYPE eq 'OK'){
-my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0><$SUB1>$MESSAGE1</$SUB1><$SUB2>$MESSAGE2</$SUB2></$ROOT>\n] if ($MESSAGE2 ne '');
-	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0><$SUB1>$MESSAGE1</$SUB1></$ROOT>\n] if (($MESSAGE1 ne '')&&($MESSAGE2 eq ''));
-	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB0>$MESSAGE0</$SUB0></$ROOT>\n] if ($MESSAGE1 eq '');
+my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1><$SUB2>$RSEC</$SUB2><$SUB3>$RTHI</$SUB3></$ROOT>\n] if ($RTHI ne '');
+	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1><$SUB2>$RSEC</$SUB2></$ROOT>\n] if (($RSEC ne '')&&($RTHI eq ''));
+	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1></$ROOT>\n] if ($RSEC eq '');
 	my $LOG="[$now]-[API-RESPONSE-SENT]: $OK\n"; 
 	print LOGFILE $LOG if $debug<=4;
 	print $LOG if $debug>=3; 
 	return $OK;
 }#if OK
 elsif ($RESPONSE_TYPE eq 'ERROR'){
-my	$ERROR=qq[<?xml version="1.0" ?><Error><Error_Message>$MESSAGE0</Error_Message></Error>\n];
+my	$ERROR=qq[<?xml version="1.0" ?><Error><Error_Message>$RONE</Error_Message></Error>\n];
 	my $LOG="[$now]-[API-RESPONSE-SENT]: $ERROR\n";
 	print LOGFILE $LOG if $debug<=4;
 	print $LOG if $debug>=3;
@@ -374,17 +379,17 @@ my	$ERROR=qq[<?xml version="1.0" ?><Error><Error_Message>$MESSAGE0</Error_Messag
 }#elsif ERROR
 }#ACTION TYPE ne LOG
 elsif($ACTION_TYPE eq 'LOG'){
-my	$LOG="[$now]-[API-LOG-$RESPONSE_TYPE]: $MESSAGE0\n";
+my	$LOG="[$now]-[API-LOG-$RESPONSE_TYPE]: $RONE\n";
 print LOGFILE $LOG;	
 print $LOG if $debug>=3;
 }#ACTION TYPE LOG
 elsif($ACTION_TYPE eq 'LOGDB'){
 use vars qw($INNER_TID);
-my $SQL=qq[INSERT INTO cc_transaction (`id`,`type`,`inner_tid`,`transaction_id`,`IMSI`,`status`,`info`) values(NULL,"$RESPONSE_TYPE",$INNER_TID,"$MESSAGE0","$MESSAGE1","$MESSAGE2","$MESSAGE3")];
+my $SQL=qq[INSERT INTO cc_transaction (`id`,`type`,`inner_tid`,`transaction_id`,`IMSI`,`status`,`info`) values(NULL,"$RESPONSE_TYPE",$INNER_TID,"$RONE","$RSEC","$RTHI","$RFOUR")];
 	&SQL($SQL) if $debug<=3;
 	my $LOG='';
 	$LOG="[$now]-[API-LOGDB]: $SQL\n" if $debug==4;
-	$LOG="[$now]-[API-LOGDB]: $RESPONSE_TYPE $MESSAGE0\n" if $debug<=3;
+	$LOG="[$now]-[API-LOGDB]: $RESPONSE_TYPE $RONE\n" if $debug<=3;
 	print LOGFILE $LOG if $debug<=4;
 	print $LOG if $debug>=3;
 }#ACTION TYPE LOGDB
@@ -1227,7 +1232,7 @@ return -1;
 #
 ### sub DataAUTH
 sub DataAUTH{
-print $new_sock &response('DataAUTH','OK',1);
+print $new_sock &response('DataAUTH','OK',0);
 }# end sub DataAUTH
 #
 ###
@@ -1241,22 +1246,46 @@ print $new_sock &response('MO_SMS','OK',$Q{transactionid},1,'RuimTools');
 #
 ### sub MO_SMS
 sub MT_SMS{
-use vars qw(%Q);
 print $new_sock &response('MT_SMS','OK',$Q{transactionid},1);
+&response('LOGDB','MT_SMS',$Q{transactionid},$Q{imsi},'RSP',"1");
 }#end sub MT_SMS
 #
 sub MOSMS_CDR{
-	&response('LOG','MOSMS_CDR',1);
+	my $CDR_result=&SMS_CDR;
+	&response('LOG','MOSMS_CDR',$CDR_result);
+	print $new_sock &response('MOSMS_CDR','OK',$Q{transactionid},$CDR_result);
+	&response('LOGDB','MOSMS_CDR',$Q{transactionid},$Q{imsi},'RSP',"$CDR_result");
 }#end sub MOSMS_CDR
 sub MTSMS_CDR{
-	&response('LOG','MTSMS_CDR',1);
+	my $CDR_result=&SMS_CDR;
+	&response('LOG','MTSMS_CDR',$CDR_result);
+	print $new_sock &response('MTSMS_CDR','OK',$Q{transactionid},$CDR_result);
+	&response('LOGDB','MTSMS_CDR',$Q{transactionid},$Q{imsi},'RSP',"$CDR_result");
 }#end sub MTSMS_CDR
 #
 sub SMSContent_CDR{
-	&response('LOG','SMSContent_CDR',1);
-	print $new_sock &response('MT_SMS','OK',$Q{transactionid},1);
+	use vars qw(%Q);#workaround #19 C9RFC
+	$Q{'cdr_id'}='NULL';#workaround #19 C9RFC
+	my $CDR_result=&SMS_CDR;
+	&response('LOG','SMSContent_CDR',$CDR_result);
+	print $new_sock &response('MT_SMS','OK',$Q{transactionid},$CDR_result);
+	&response('LOGDB','SMSContent_CDR',$Q{transactionid},$Q{imsi},'RSP',"$CDR_result");
 }#end sub SMSContent_CDR
 #
+### SMS_CDR
+## Processing CDRs for each type of SMS
+###
+sub SMS_CDR{
+use vars qw(%Q);
+#
+$Q{timestamp}=uri_unescape($Q{timestamp});
+$Q{message_date}=uri_unescape($Q{message_date});
+#
+my $SQL=qq[INSERT into `msrn`.`cc_sms_cdr` ( `id`, `msisdn`, `allow`, `reseller_charge`, `timestamp`, `smsc`, `user_charge`, `mnc`, `srcgt`, `request_type`, `smsfrom`, `IOT`, `client_charge`, `transactionid`, `route`, `imsi`, `user_balance`, `message_date`,`carrierid`,`message_status`,`service_id`,`sms_type`,`sender`,`message`,`original_cli`) values ( "$Q{cdr_id}", "$Q{msisdn}", "$Q{allow}", "$Q{reseller_charge}", "$Q{timestamp}", "$Q{smsc}", "$Q{user_charge}", "$Q{mnc}", "$Q{srcgt}", "$Q{request_type}", "$Q{smsfrom}", "$Q{IOT}", "$Q{client_charge}", "$Q{transactionid}", "$Q{route}", "$Q{imsi}", "$Q{user_balance}", "$Q{message_date}","$Q{carrierid}","$Q{message_status}","$Q{service_id}","$Q{sms_type}","$Q{sender}","$Q{message}","$Q{original_cli}")];
+my $sql_result=&SQL($SQL);
+&response('LOG','SMS_CDR',$sql_result);
+return $sql_result; 
+}#end sub SMS_CDR
 # end SMS section
 #########
 #
