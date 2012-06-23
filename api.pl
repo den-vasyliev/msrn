@@ -3,7 +3,7 @@
 ####################################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 #
-# API CGI for PROXY SERVER 210612rev.5.1
+# API CGI for PROXY SERVER 230612rev.6.0
 #
 ####################################################
 #
@@ -42,7 +42,8 @@ close LOGFILE;
 &logg("GET QUERY ".$query->url(-path_info=>1,-query=>1));
 #
 foreach $field (sort ($query->param)) {
-    foreach $value ($query->param($field)) {
+    if ($field=~/timestamp2012/){next;}
+	foreach $value ($query->param($field)) {
 $PARAM{$field}=uri_unescape($value);
 $PARAM{'xml'}=~s/<\?xml.*\?>/ / if $field eq 'xml';#for payments
 &logg("CATCH QUERY $field $value");
