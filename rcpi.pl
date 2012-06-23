@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 220612rev.26.2 HFX_120-807';
+my $REV='API Server 230612rev.27.7 PMNT MSG';
 ##
 #################################################################
 ## 
@@ -240,6 +240,12 @@ our $ERROR=$REQUEST->{Error_Message};
 &response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$SMS $ERROR");
 return "$ERROR$SMS";
 	}#sms
+	case 'SIG_SendSMSMT' {
+my $SMS=$REQUEST->{SMS_Response}{REQUEST_STATUS};
+our $ERROR=$REQUEST->{Error_Message};
+&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$SMS $ERROR");
+return "$ERROR$SMS";
+	}#sms MT
 	case 'SIG_SendResale' {
 my $USSD=$REQUEST->{RESALE_Response}{RESPONSE};
 our $ERROR=$REQUEST->{Error_Message};
@@ -309,10 +315,11 @@ print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=3;
 
 my $rv; 
 my $sth;
-our @result=();
+our (@result, $new_id);
 if($SQL!~m/^SELECT/i){
 $rv=$dbh->do($SQL);
 push @result,$rv;
+$new_id = $dbh -> {'mysql_insertid'};
 }
 else{
 $sth=$dbh->prepare($SQL);
@@ -323,7 +330,7 @@ $sth->finish();
 if($rv){
 	our $sql_aff_rows =$rv;
 	my $sql_record = @result;
-	&response('LOG','SQL-MYSQL-RETURNED',"@result $rv");
+	&response('LOG','SQL-MYSQL-RETURNED',"@result $rv $new_id");
 	return @result; 
 	}else{
 	&response('LOG','SQL-MYSQL-RETURNED','Error');
@@ -608,6 +615,9 @@ else{#else not msrn and dest
 	#print $new_sock &response('auth_callback_sig','ERROR','#'.__LINE__.' CANT GET MSRN OR DEST');
 	&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'ERROR',"CANT GET MSRN: $offline $ERROR");
 	print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please try to change roaming operator. Your number is offline for us");
+###
+### RFC try to call directly on UK number
+###
 return 'SPOOL ERROR -2';	
 }#else not msrn and dest
 }#if Status 1 and Balance >1
@@ -830,13 +840,36 @@ switch ($code){
 		$URL=qq[transaction_id=$transaction_id&query=$query&$URL_QUERY&timestamp=$timestamp] if $msrn==0;
 		&response('LOG',"$code-URL-SET","$URL");
 	}#case getmsrn
+	#
 	case "SIG_SendUSSD" {
-		use vars qw($message);
-		$URL=qq[transaction_id=$transaction_id&ussdto=$msisdn&$URL_QUERY&&message=$message&timestamp=$timestamp] if $message_code;
+		use vars qw($message $message_code);
+		if ($message_code=~/^pmnt/){#USSD for PMNT
+		my $SQL=qq[SELECT CONCAT('%2B',phone) FROM cc_card where username="$options"];
+		my @sql_record=&SQL($SQL);
+		$msisdn=$sql_record[0];
+		$message=~s/_AMOUNT_/$options1/;
+		$message=~s/_CN_/$options/;
+		}#if message_code PMNT
+		$URL=qq[transaction_id=$transaction_id&ussdto=$msisdn&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
+		&response('LOG',"$code-URL-SET","$URL");
 	}#case sendussd
-	case "SIG_SendSMS" {
+	#
+	case "SIG_SendSMSMT" {#send sms MT to sub
+		use vars qw($message $message_code);
+		if ($message_code=~/^pmnt/){#USSD for PMNT
+		my $SQL=qq[SELECT CONCAT('%2B',phone) FROM cc_card where username="$options"];
+		my @sql_record=&SQL($SQL);
+		$msisdn=$sql_record[0];
+		$message=~s/_AMOUNT_/$options1/;
+		$message=~s/_CN_/$options/;
+		}#if message_code PMNT
+		$URL=qq[transaction_id=$transaction_id&smsto=$msisdn&smsfrom=ruimtools&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
+		&response('LOG',"$code-URL-SET","$URL");
+	}#case sendsms MT
+	#
+	case "SIG_SendSMS" {#send sms MO to any sub
 		$URL=qq[transaction_id=$transaction_id&smsto=%2B$query&smsfrom=ruimtools&$URL_QUERY&msisdn=$options1&message=$options&timestamp=$timestamp];
-	}#case sendsms
+	}#case sendsms MO
 	case "SIG_SendResale" {
 		&response('LOG',"$code-PARAM_GET","$query,$host,$msisdn,$message_code,$options,$options1");
 		$URL_QUERY=~s/_TIMESTAMP_/$timestamp/;
@@ -1072,9 +1105,9 @@ return -1;
 }#END sub auth ##
 #
 sub PAYMNT{
-use vars qw($REMOTE_HOST);
+use vars qw($REMOTE_HOST $new_id);
 my @TR= keys %{ $REQUEST->{payment}{transactions}{transaction} };
-our $SQL_T_result;
+our ($SQL_T_result,$CARD_NUMBER,$AMOUNT);
 my $SQL='';
 $SQL=qq[INSERT INTO cc_epayments (`payment_id`, `ident`,`status`,`amount`,`currency`,`timestamp`,`salt`,`sign`,`transactions_ids`) values("$REQUEST->{payment}{id}","$REQUEST->{payment}{ident}","$REQUEST->{payment}{status}","$REQUEST->{payment}{amount}","$REQUEST->{payment}{currency}","$REQUEST->{payment}{timestamp}","$REQUEST->{payment}{salt}","$REQUEST->{payment}{sign}","@TR")];
 my $SQL_P_result=&SQL($SQL);
@@ -1084,17 +1117,19 @@ my $SQL_P_result=&SQL($SQL);
 if (&auth($REQUEST->{payment}{salt},'PAYMNT',$REMOTE_HOST,"-sha512 -hmac",$REQUEST->{payment}{sign})==0){
 &response('LOG','PAYMNT-TR-RESULT',"@TR");
 use vars qw($rate $mch_name);
-foreach my $tr (@TR){
+foreach my $tr (@TR){#for each transaction id
 $REQUEST->{payment}{transactions}{transaction}{$tr}{info}=~s/"//g; #"
 $REQUEST->{payment}{transactions}{transaction}{$tr}{info}=~/{(.*):(.*),(.*):(.*)}/;;
-my $CARD_NUMBER=$2;
+$CARD_NUMBER=$2;
 my $SQL='';
 $SQL=qq[INSERT INTO cc_epayments_transactions (`id`,`mch_id`, `srv_id`,`amount`,`currency`,`type`,`status`,`code`, `desc`,`info`) values("$tr","$REQUEST->{payment}{transactions}{transaction}{$tr}{mch_id}","$REQUEST->{payment}{transactions}{transaction}{$tr}{srv_id}","$REQUEST->{payment}{transactions}{transaction}{$tr}{amount}","$REQUEST->{payment}{transactions}{transaction}{$tr}{currency}","$REQUEST->{payment}{transactions}{transaction}{$tr}{type}","$REQUEST->{payment}{transactions}{transaction}{$tr}{status}","$REQUEST->{payment}{transactions}{transaction}{$tr}{code}","$REQUEST->{payment}{transactions}{transaction}{$tr}{desc}","$CARD_NUMBER")];
 $SQL_T_result=&SQL($SQL);
 &response('LOG','PAYMNT-TR-SQL-RESULT',"$SQL_T_result");
+$SQL=qq[UPDATE cc_epayments set process="$SQL_T_result" where id=$new_id];
+my $SQL_update_result=&SQL($SQL);
 if (($REQUEST->{payment}{transactions}{transaction}{$tr}{type}==11)&&($SQL_T_result>0)){#if debited transaction
-my $amount=$REQUEST->{payment}{transactions}{transaction}{$tr}{amount}/$rate;
-$SQL=qq[INSERT into `msrn`.`cc_epayment_log` (`amount`, `paymentmethod`, `cardid`, `cc_owner`) values ( round($amount,3), "$mch_name", (select id from cc_card where username="$CARD_NUMBER"),"$tr")];
+$AMOUNT=$REQUEST->{payment}{transactions}{transaction}{$tr}{amount}/$rate;
+$SQL=qq[INSERT into `msrn`.`cc_epayment_log` (`amount`, `paymentmethod`, `cardid`, `cc_owner`) values ( round($AMOUNT,3), "$mch_name", (select id from cc_card where username="$CARD_NUMBER"),"$tr")];
 my $SQL_debit_result=&SQL($SQL);
 &response('LOG','PAYMNT-TR-DEBIT-SQL-RESULT',"$SQL_debit_result");
 }#end if debited
@@ -1107,6 +1142,14 @@ $SQL_T_result="-1 NO AUTH";
 #use vars qw($SQL_T_result);
 &response('LOGDB',"PAYMNT","$REQUEST->{payment}{id}",0,'RSP',"$SQL_T_result @TR");
 print $new_sock "200 $SQL_T_result";
+## Wait for incoming SMS will FIX
+#$code,$query,$host,$msisdn,$message_code,$options,$options1
+my $USSD_result=&SENDGET('SIG_SendSMSMT','','','','pmnt_ok',"$CARD_NUMBER","$REQUEST->{payment}{id}") if $SQL_T_result>0;
+$USSD_result=&SENDGET('SIG_SendSMSMT','','','','pmnt_error',"$CARD_NUMBER","$REQUEST->{payment}{id}") if $SQL_T_result<0;
+#
+#my $USSD_result=&SENDGET('SIG_SendUSSD','','','','pmnt_ok',"$CARD_NUMBER","$REQUEST->{payment}{id}") if $SQL_T_result>0;
+##$USSD_result=&SENDGET('SIG_SendUSSD','','','','pmnt_error',"$CARD_NUMBER","$REQUEST->{payment}{id}") if $SQL_T_result<0;
+#
 return $SQL_T_result;
 }# END sub PAYMNT
 #
