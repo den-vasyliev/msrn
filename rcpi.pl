@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 240612rev.28.0';
+my $REV='API Server 240612rev.28.1 HFX_875';
 ##
 #################################################################
 ## 
@@ -872,6 +872,7 @@ switch ($code){
 	#
 	case "SIG_SendSMS" {#send sms MO to any sub
 		$URL=qq[transaction_id=$transaction_id&smsto=%2B$query&smsfrom=ruimtools&$URL_QUERY&msisdn=$options1&message=$options&timestamp=$timestamp];
+		$query=$Q{'imsi'};#for cc_transaction usage
 	}#case sendsms MO
 	case "SIG_SendResale" {
 		&response('LOG',"$code-PARAM_GET","$query,$host,$msisdn,$message_code,$options,$options1");
