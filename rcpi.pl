@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 240612rev.28.2 HFX_825';
+my $REV='API Server 240612rev.28.4 CFU';
 ##
 #################################################################
 ## 
@@ -252,6 +252,12 @@ switch ($REQUEST_OPTION){
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$USSD $ERROR");
 		return $USSD;
 	}#resale
+	case 'SIG_GetTIME' {
+		my $TIME=$REQUEST->{RESPONSE};
+		our $ERROR=$REQUEST->{Error_Message};
+		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$TIME $ERROR");
+		return "$TIME$ERROR";
+	}#get time
 	else {
 		print &response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION",'NO OPTION FOUND $@');
 		return "Error: $@";}
@@ -822,30 +828,28 @@ my ($code,$query,$host,$msisdn,$message_code,$options,$options1)=@_;
 #
 $host='http://api2.globalsimsupport.com/WebAPI/C9API.aspx?' if !$host;
 #
-my $SQL=qq[SELECT request, from_unixtime($time),response FROM cc_actions where code="$code" or code="$message_code"];
+my $SQL=qq[SELECT request, from_unixtime($time),response FROM cc_actions where code="$code" or code="$message_code"];#or used for USSD msg
 my @sql_record=&SQL($SQL);
 #
 my $URL_QUERY=$sql_record[0];
 my $timestamp=uri_escape($sql_record[1]);
 my $message=$sql_record[2];
 #
-#if ($message_code){#if message text code is defined
-#	my $SQL=qq[SELECT response FROM cc_actions where code="$message_code"];
-#	my @sql_record=&SQL($SQL);
-#	our $message=$sql_record[0];
-	#$message=uri_escape($message) if $code ne 'SIG_SendResale';
-}#if message_code
-#
 switch ($code){
-	case "SIG_GetMSRN" {
+	case "SIG_GetTIME" {#get max time for call
+	$URL_QUERY=~s/_DEST_/$msisdn/;
+	$URL_QUERY=~s/_SUBID_/$query/;
+	$URL=$URL_QUERY;
+	&response('LOG',"$code-URL-SET","$URL");
+	}#case gettime
+	case "SIG_GetMSRN" {# get msrn
 		$msrn=&reuse_msrn($query) if $options eq '126';#code 126 checks is not safety for changes
 		&response('LOG',"$code-REUSE-GET","$msrn");
 		$URL=qq[transaction_id=$transaction_id&query=$query&$URL_QUERY&timestamp=$timestamp] if $msrn==0;
 		&response('LOG',"$code-URL-SET","$URL");
 	}#case getmsrn
 	#
-	case "SIG_SendUSSD" {
-		use vars qw($message $message_code);
+	case "SIG_SendUSSD" {#send ussd
 			if ($message_code=~/^pmnt/){#USSD for PMNT
 				my $SQL=qq[SELECT CONCAT('%2B',phone) FROM cc_card where username="$options"];
 				my @sql_record=&SQL($SQL);
@@ -859,7 +863,6 @@ switch ($code){
 	}#case sendussd
 	#
 	case "SIG_SendSMSMT" {#send sms MT to sub
-		use vars qw($message $message_code);
 		if ($message_code=~/^pmnt/){#USSD for PMNT
 		my $SQL=qq[SELECT CONCAT('%2B',phone) FROM cc_card where username="$options"];
 		my @sql_record=&SQL($SQL);
@@ -929,9 +932,7 @@ else{# timeout
 ## Return message
 #################################################################
 sub rc_api_cmd{
-my $code;
-my $sub_code;
-my $options;
+my ($code,$sub_code,$options);
 my $imsi=$_[0];
 $code=$Q{'code'};
 $sub_code=$Q{'sub_code'};
@@ -947,6 +948,7 @@ switch ($code){
 		my $auth_result=&auth($Q{auth_key},'RESALE',$Q{reseller},'-md5');
 		if ($auth_result==0){
 		&response('LOG','RC-API-CMD',"GET_MSRN");
+		my $SQL=qq[SELECT id from];
 		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_MSRN $code $Q{auth_key}");
 		my $resale_TID="$Q{transactionid}";
 		my $msrn=&SENDGET('SIG_GetMSRN',"$imsi");
@@ -975,7 +977,7 @@ switch ($code){
 		$SQL=~s/_TYPE_/$Q{options}/ if $sub_code eq 'get_resale_msrn';#Get Resellers MSRN count get_resale_msrn
 		@sql_record=&SQL($SQL);
 		my $stat_result=$sql_record[0];
-		$stat_result=substr($stat_result,0,6) if $sub_code==71;#Get Rate to Dest get_rate
+		$stat_result=substr($stat_result,0,6) if $sub_code eq 'get_rate';#Get Rate to Dest get_rate
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$stat_result");
 		&response('LOG','RC-API-CMD-STAT',"$stat_result");
 		return 'CMD 2';
@@ -983,12 +985,25 @@ switch ($code){
 	case 'send_ussd' {#SEND_USSD
 		&response('LOG','RC-API-CMD',"SEND_USSD");
 		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'REQ',"SEND_USSD $code");
-		my $USSD_result=&SENDGET('SIG_SendUSSD','','http://api2.globalsimsupport.com/WebAPI/C9API.aspx?',$Q{msisdn},$sub_code);
+		my $USSD_result=&SENDGET('SIG_SendUSSD','','',$Q{msisdn},$sub_code);
 		&response('LOG','RC-API-CMD',"SEND_USSD $USSD_result");
 		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"SEND_USSD_RESULT $USSD_result");
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$Q{msisdn} $USSD_result");
 		return 'CMD 3';
 	}#case send_ussd
+	case 'get_session_time' {#Get max session time
+		&response('LOG','RC-API-CMD',"GET_SESSION_TIME");
+		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'REQ',"GET_SESSION_TIME $code");
+		my $SQL=qq[SELECT id from cc_card where useralias="$Q{imsi}" or firstname="$Q{imsi}"];
+		my @sql_record=&SQL($SQL);
+		my $sub_id=$sql_record[0];
+		my $USSD_result=&SENDGET('SIG_GetTIME',$sub_id,'https://127.0.0.1',$Q{msisdn});
+		&response('LOG','RC-API-CMD',"GET_SESSION_TIME $USSD_result");
+		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_SESSION_TIME $USSD_result");
+		print $new_sock $USSD_result if $options eq 'cleartext';
+		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$USSD_result") if $options ne 'cleartext';;
+		return 'CMD 4';
+	}#case get_session_time
 	else {
 		&response('LOG','RC-API-CMD-UNKNOWN',"$code");
 		&response('LOGDB','CMD',"$Q{transactionid}","$Q{imsi}",'ERROR',"$code");

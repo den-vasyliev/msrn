@@ -3,7 +3,7 @@
 ####################################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 #
-# API CGI for PROXY SERVER 230612rev.6.0
+# API CGI for PROXY SERVER 240612rev.7.1
 #
 ####################################################
 #
@@ -50,14 +50,19 @@ $PARAM{'xml'}=~s/<\?xml.*\?>/ / if $field eq 'xml';#for payments
 push @QUERY,"$field=".uri_escape($value);#for general request
 $qr=$qr."$field=".uri_escape($value).';';#for lab request
     }#foreach value
-push @QUERY,"code=2 imsi=0 msisdn=1 request_type=rc_api_cmd sub_code=76 transactionid=10" if $field eq 'card_number';#for payments
+push @QUERY,"code=get_stat request_type=rc_api_cmd sub_code=get_card_number transactionid=10" if $field eq 'card_number';#for payments
 }#foreach fiels
 #
-if ($PARAM{imsi} eq '234180000079890'){#if lab imsi
+if ($PARAM{imsi} eq '234180000079890'){#if java lab imsi
 @result=`curl 'http://127.0.0.1:8008/roamingcenter/?$qr'`;#redirect to java lab server
 print @result;
 exit;#end processing
-}#if lab redirect
+}#if java lab redirect
+elsif ($PARAM{imsi} eq '234180000379608'){#if perl lab imsi
+@result=`curl 'http://10.10.10.2/cgi-bin/api.pl?$qr'`;#redirect to perl lab server
+print @result;
+exit;#end processing
+}#if perl lab redirect
 else{#if general request
 if (!$PARAM{xml}){#if not xml payments
 &logg("SEND QUERY @QUERY");

@@ -1,0 +1,111 @@
+####################################################
+## Copyright (C) 2012, RuimTools denis@ruimtools.com
+#
+# Test Cases for RCPI SERVER 240612.rev.17.9
+#
+####################################################
+#
+### SIG CALLBACK
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A112%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379608;transactionid=164354;carrierid=;request_type=auth_callback_sig;mcc=280;mnc=01;msisdn=%2B447700055360;tadig=CYPCT;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379608;iccid=89234189720000000005'
+### END SIG CALLBACK
+#
+### SMS-MP
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A11%2A380674014759%2A00480065006C006C006F0020007400680069007300200069007300200074%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379608;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=120786'
+#
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A22%2A0065007300740020006D0075006C00740069002000700061006700650020006D0065007300730061%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379608;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=120762'
+### END SMS-MP
+#
+## SMSContent_CDR
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=SMSContent_CDR;sms_type=MO;timestamp=2012-06-19%2019%3A29%3A02;message_date=2012-06-19%2019%3A29%3A02;transactionid=20120619192902;cdr_id=1;carrierid=;sender=RuimTools;destination=380674014759;original_cli=447700079964;message=%D0%A2%D0%B5%D1%81%D1%825'
+### END SMSContent_CDR
+#
+### AGENT CALL GRP
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&msisdn=1&imsi=234180000379608&code=1&sub_code=0&transactionid=100&reseller=RUIMTOOLS&auth_key=ba23dce5dc2fdec04b2a25e162a2a455&options=cleartext"
+### END AGENT CALL GRP
+#
+### CMD Get Rate to Dest get_rate
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+38067;imsi=234180000379608;code=get_stat;sub_code=get_rate;transactionid=321'
+#<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>0.2158</display_message></API_response>
+### END Get Rate to Dest 71
+#
+### CMD Get USSD for day get_ussd_day
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+61;imsi=234180000379608;code=get_stat;sub_code=get_ussd_day;transactionid=321"
+#<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>35</display_message></API_response>
+### END CMD Get USSD for day 69
+#
+### CMD Get LU for day get_lu_day
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+61;imsi=234180000379608;code=get_stat;sub_code=get_lu_day;transactionid=321"
+#<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>1</display_message></API_response>
+### END CMD Get LU for day 68
+#
+### CMD Switch MNO Message switch_mno
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=%2B447700079964;imsi=234180000379608;code=send_ussd;sub_code=switch_mno;transactionid=321'
+#<?xml version="1.0" ?><MOC_response><transaction_id>165209</transaction_id><display_message>Please try to change roaming operator. Your number offline for usa</display_message></MOC_response>
+### END CMD Switch MNO Message 70
+#
+### SQL INJECTION
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=1;imsi=234180000379608;code=1;sub_code=0;transactionid=999;reseller=test;auth_key=char(1)union(select(auth_key)from(cc_resale))--'
+#<?xml version="1.0" ?><API_response><transaction_id>999</transaction_id><display_message>NO AUTH</display_message></API_response>
+### END SQL INJECTION
+#
+### CMD PING
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=ping'
+#<?xml version="1.0" ?><API_response><transaction_id>0</transaction_id><display_message>PING OK</display_message></API_response>
+### END CMD PING
+#
+### SIG LU_CDR
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000379608;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
+<?xml version="1.0" ?><CDR_response><cdr_id>59526930</cdr_id><cdr_status>1</cdr_status></CDR_response>
+
+curl 'http://127.0.0.1:8008/roamingcenter/?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000079890;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
+### END SIG LU_CDR
+
+### USSD Your number
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379608;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088' 
+#<?xml version="1.0" ?><MOC_response><transaction_id>184863</transaction_id><display_message>Unknown USSD request</display_message></MOC_response>
+#
+curl 'http://127.0.0.1:8008/roamingcenter/?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000079890;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088'
+### END USSD Your number
+#
+### USSD Rates
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A128%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379608;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088'
+### END USSD Rates
+#
+### CMD Get Resellers MSRN count get_resale_msrn G
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=0;imsi=0;code=get_stat;sub_code=get_resale_msrn;reseller=7354bff766a40f54d17f6e397cbbba76;options=G;transactionid=321"
+#<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>164</display_message></API_response>
+### END CMD Get Resellers MSRN count get_resale_msrn G
+#
+### CMD Get Resellers MSRN count get_resale_msrn R
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=0;imsi=0;code=get_stat;sub_code=get_resale_msrn;reseller=7354bff766a40f54d17f6e397cbbba76;options=R;transactionid=321"
+#<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>146</display_message></API_response>
+### END CMD Get Resellers MSRN count get_resale_msrn R
+#
+### PAYMNT
+curl -k -d 'xml=<?xml version="1.0" encoding="utf-8"?><payment id="82578"><ident>83f70c0184f79eea7c14a5d5b0e33dae5aa2992e</ident><status>5</status><amount>100</amount><currency>UAH</currency><timestamp>1339709504</timestamp><transactions><transaction id="117659"><mch_id>230</mch_id><srv_id>0</srv_id><amount>100</amount><currency>UAH</currency><type>10</type><status>11</status><code>00</code><desc>Лицевой счет 9671645459</desc><info>{"acc":"9671645459","amount":1}</info></transaction><transaction id="117660"><mch_id>230</mch_id><srv_id>0</srv_id><amount>100</amount><currency>UAH</currency><type>11</type><status>11</status><code>00</code><desc>Лицевой счет 9671645459</desc><info>{"acc":"9671645459","amount":1}</info></transaction></transactions><salt>1777e98da1bbfb143df54e7efc8ebd1210258d21</salt><sign>d19beb1368e8540d303134822f43babfda39548ae486719e2b0f4d201e805ae90665f0dc44913139c02c3f244528d2cadc8ee85d03633f659a4ba63ac6def0e1</sign></payment>' https://127.0.0.1/cgi-bin/api.pl
+### END PAYMNT
+#
+### CHECK CARD NUMBER
+curl 'http://127.0.0.1/cgi-bin/api.pl?card_number=9671645459'
+### END CHECK CARD NUMBER
+#
+### MSISDN allocation
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=msisdn_allocation;cdr_id=43137;timestamp=2012-05-22%2007%3A47%3A35;carrierid=;IMSI=234180000379608;MSISDN=447700079965"
+### END MSISDN allocation
+#
+### DataAUTH
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000379607;MCC=255;MNC=
+003;TotalCurrentByteLimit=0;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000379607;ICCID=8923418972000000007"
+### END DataAUTH
+#
+### SMS MT
+curl "http://127.0.0.1/cgi-bin/api.pl?timestamp2012-06-23%2017%3A56%3A11=;imsi=234180000379608;transactionid=114927;destination=447700079964;from=393358840009361;mcc=255;mnc=03;request_type=MT_SMS;user_balance=0.0000;carrierid=;tadig=UKRKS;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088"
+### END SMS MT
+#
+### SMS Content CDR
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=SMSContent_CDR;sms_type=MO;timestamp=2012-06-23%2021%3A14%3A15;message_date=2012-06-23%2021%3A14%3A15;transactionid=20120623211415;cdr_id=1;carrierid=;sender=RuimTools;destination=380635644216;original_cli=447700079964;message=%D0%A2%D0%B5%D1%81%D1%824"
+### END SMS Content CDR
+#
+### GET SESSION TIME
+curl -k 'https://127.0.0.1/a2billing/admin/Public/RateEngine.php?called=380443736899&balance=0&id_cc_card=16'
+### END GET SESSION TIME
