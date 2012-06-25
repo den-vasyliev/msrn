@@ -3,7 +3,7 @@
 ####################################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 #
-# API CGI for PROXY SERVER 240612rev.7.1
+# API CGI for PROXY SERVER 260612rev.8.0
 #
 ####################################################
 #
@@ -56,11 +56,13 @@ push @QUERY,"code=get_stat request_type=rc_api_cmd sub_code=get_card_number tran
 if ($PARAM{imsi} eq '234180000079890'){#if java lab imsi
 @result=`curl 'http://127.0.0.1:8008/roamingcenter/?$qr'`;#redirect to java lab server
 print @result;
+close $sock;
 exit;#end processing
 }#if java lab redirect
 #elsif ($PARAM{imsi} eq '234180000379608'){#if perl lab imsi
 #@result=`curl 'http://10.10.10.2/cgi-bin/api.pl?$qr'`;#redirect to perl lab server
 #print @result;
+#close $sock;
 #exit;#end processing
 #}#if perl lab redirect
 else{#if general request

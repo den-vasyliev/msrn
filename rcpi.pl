@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 250612rev.29.1 CFU';
+my $REV='API Server 260612rev.30.1 HFX_429';
 ##
 #################################################################
 ## 
@@ -426,6 +426,8 @@ if ($sub_id>0){#if found subscriber
 		case 1 {#active already
 			print $new_sock &response('LU_CDR','OK',"$XML_KEYS{cdr_id}",'1') if !$CHECK_ONLY;
 			&response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'OK',"CHECK_ONLY $XML_KEYS{cdr_id}");
+			my $SQL=qq[UPDATE cc_card set phone="$msisdn" where id=$sub_id];
+			my $sql_result=&SQL($SQL);
 			return $sub_id;
 		}#case 1
 		case 2 {#new
