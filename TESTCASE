@@ -20,7 +20,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=SMSContent_CDR;sms_type=MO;ti
 ### END SMSContent_CDR
 #
 ### AGENT CALL GRP
-curl "http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&msisdn=1&imsi=234180000379608&code=1&sub_code=0&transactionid=100&reseller=RUIMTOOLS&auth_key=ba23dce5dc2fdec04b2a25e162a2a455&options=cleartext"
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&imsi=234180000379608&code=1&sub_code=0&transactionid=100&reseller=RUIMTOOLS&auth_key=ba23dce5dc2fdec04b2a25e162a2a455&options=cleartext'
 ### END AGENT CALL GRP
 #
 ### CMD Get Rate to Dest get_rate
@@ -29,12 +29,12 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;opti
 ### END Get Rate to Dest 71
 #
 ### CMD Get USSD for day get_ussd_day
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+61;imsi=234180000379608;code=get_stat;sub_code=get_ussd_day;transactionid=321"
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+61;imsi=234180000379608;code=get_stat;sub_code=get_ussd_day;transactionid=321'
 #<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>35</display_message></API_response>
 ### END CMD Get USSD for day 69
 #
 ### CMD Get LU for day get_lu_day
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+61;imsi=234180000379608;code=get_stat;sub_code=get_lu_day;transactionid=321"
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+61;imsi=234180000379608;code=get_stat;sub_code=get_lu_day;transactionid=321'
 #<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>1</display_message></API_response>
 ### END CMD Get LU for day 68
 #
@@ -56,7 +56,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=ping'
 ### SIG LU_CDR
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000379608;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
 <?xml version="1.0" ?><CDR_response><cdr_id>59526930</cdr_id><cdr_status>1</cdr_status></CDR_response>
-
+#
 curl 'http://127.0.0.1:8008/roamingcenter/?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000079890;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
 ### END SIG LU_CDR
 

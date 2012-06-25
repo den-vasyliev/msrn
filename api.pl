@@ -58,11 +58,11 @@ if ($PARAM{imsi} eq '234180000079890'){#if java lab imsi
 print @result;
 exit;#end processing
 }#if java lab redirect
-elsif ($PARAM{imsi} eq '234180000379608'){#if perl lab imsi
-@result=`curl 'http://10.10.10.2/cgi-bin/api.pl?$qr'`;#redirect to perl lab server
-print @result;
-exit;#end processing
-}#if perl lab redirect
+#elsif ($PARAM{imsi} eq '234180000379608'){#if perl lab imsi
+#@result=`curl 'http://10.10.10.2/cgi-bin/api.pl?$qr'`;#redirect to perl lab server
+#print @result;
+#exit;#end processing
+#}#if perl lab redirect
 else{#if general request
 if (!$PARAM{xml}){#if not xml payments
 &logg("SEND QUERY @QUERY");

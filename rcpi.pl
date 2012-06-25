@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 240612rev.28.4 CFU';
+my $REV='API Server 250612rev.29.1 CFU';
 ##
 #################################################################
 ## 
@@ -256,7 +256,7 @@ switch ($REQUEST_OPTION){
 		my $TIME=$REQUEST->{RESPONSE};
 		our $ERROR=$REQUEST->{Error_Message};
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$TIME $ERROR");
-		return "$TIME$ERROR";
+		return "$ERROR$TIME";
 	}#get time
 	else {
 		print &response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION",'NO OPTION FOUND $@');
@@ -837,10 +837,11 @@ my $message=$sql_record[2];
 #
 switch ($code){
 	case "SIG_GetTIME" {#get max time for call
-	$URL_QUERY=~s/_DEST_/$msisdn/;
-	$URL_QUERY=~s/_SUBID_/$query/;
-	$URL=$URL_QUERY;
-	&response('LOG',"$code-URL-SET","$URL");
+		$URL_QUERY=~s/_DEST_/$msisdn/;
+		$URL_QUERY=~s/_SUBID_/$query/;
+		$URL=$URL_QUERY;
+		&response('LOG',"$code-URL-SET","$URL");
+		$query=$Q{'imsi'};#for cc_transaction usage
 	}#case gettime
 	case "SIG_GetMSRN" {# get msrn
 		$msrn=&reuse_msrn($query) if $options eq '126';#code 126 checks is not safety for changes
@@ -910,7 +911,7 @@ if (@XML){
 	&response('LOG',"$code-RESPOND","@XML") if $debug>=3;
 	my $SENDGET_result=&XML_PARSE("@XML",$code);
 	&response('LOGDB',$code,"$transaction_id","$query",'RSP',"$SENDGET_result") if $SENDGET_result;
-	&response('LOGDB',$code,"$transaction_id","$query",'ERROR','SENDGET NO RESPONDS') if !$SENDGET_result;
+	&response('LOGDB',$code,"$transaction_id","$query",'ERROR','SENDGET NO RESPOND') if !$SENDGET_result;
 	return $SENDGET_result;
 }#if curl return
 elsif($msrn){
@@ -948,14 +949,27 @@ switch ($code){
 		my $auth_result=&auth($Q{auth_key},'RESALE',$Q{reseller},'-md5');
 		if ($auth_result==0){
 		&response('LOG','RC-API-CMD',"GET_MSRN");
-		my $SQL=qq[SELECT id from];
-		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_MSRN $code $Q{auth_key}");
+		my $SQL=qq[SELECT id,traffic_target from cc_card where (useralias="$Q{imsi}" or firstname="$Q{imsi}")];
+		my @sql_record=&SQL($SQL);
+		my $sub_id=$sql_record[0];
+		my $traffic_target=$sql_record[1];
 		my $resale_TID="$Q{transactionid}";
 		my $msrn=&SENDGET('SIG_GetMSRN',"$imsi");
 		&bill_resale($Q{auth_key},'SIG_GetMSRN');
+		if($Q{auth_key} eq $traffic_target){#resellers subscriber
+		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_MSRN $code $Q{auth_key}");
 		print $new_sock &response('rc_api_cmd','OK',$resale_TID,"$msrn") if $options ne 'cleartext';
 		$msrn=~s/\+// if $options eq 'cleartext';#cleartext for ${EXTEN} usage
 		print $new_sock $msrn if $options eq 'cleartext';
+		return 'CMD 1';}#if resellers subscriber
+			else{#if CFU subscriber
+		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_MSRN CFU $code $Q{auth_key}");
+		my $resale_TID="$Q{transactionid}";
+		my $limit=&SENDGET('SIG_GetTIME',$sub_id,'https://127.0.0.1',$msrn);
+		print $new_sock &response('rc_api_cmd','OK',$resale_TID,"$msrn","$limit") if $options ne 'cleartext';
+		$msrn=~s/\+// if $options eq 'cleartext';#cleartext for ${EXTEN} usage
+		print $new_sock "$resale_TID:$msrn:$limit" if $options eq 'cleartext';
+				}#esle CFU
 		return 'CMD 1';
 		}#if auth
 		else{
@@ -994,7 +1008,7 @@ switch ($code){
 	case 'get_session_time' {#Get max session time
 		&response('LOG','RC-API-CMD',"GET_SESSION_TIME");
 		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'REQ',"GET_SESSION_TIME $code");
-		my $SQL=qq[SELECT id from cc_card where useralias="$Q{imsi}" or firstname="$Q{imsi}"];
+		my $SQL=qq[SELECT id from cc_card where useralias="$imsi" or firstname="$imsi"];
 		my @sql_record=&SQL($SQL);
 		my $sub_id=$sql_record[0];
 		my $USSD_result=&SENDGET('SIG_GetTIME',$sub_id,'https://127.0.0.1',$Q{msisdn});
