@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 260612rev.30.1 HFX_429';
+my $REV='API Server 260612rev.30.5 CNG_MCC';
 ##
 #################################################################
 ## 
@@ -127,8 +127,6 @@ if ($PROXY_REQUEST ne 'EMPTY'){
 		$XML_KEYS{transactionid}=$XML_KEYS{SessionID} if $XML_KEYS{SessionID};
 		$XML_KEYS{imsi}=$XML_KEYS{GlobalIMSI} if $XML_KEYS{SessionID};
 		&response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'IN',$IN_SET);
-		my $LU_H_result=&LU_H;#track sim card LU history
-		&response('LOG','MAIN-LU-H-RETURN',"$LU_H_result");
 		#Get action type
 		my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});
 			eval {#save subref
@@ -417,7 +415,6 @@ my $CHECK_ONLY=$_[1];
 my $msisdn=uri_unescape($Q{msisdn});
 $msisdn=~s/\+//;
 &response('LOG','LU-REQUEST-IN',"$IMSI $msisdn");
-#$SQL=qq[SELECT id, status, credit, phone, company_website from cc_card where useralias=$IMSI and phone=$msisdn];
 $SQL=qq[SELECT id, status, credit, phone, company_website, traffic_target from cc_card where useralias="$IMSI" or firstname="$IMSI"];
 my @sql_record=&SQL($SQL);
 my ($sub_id,$sub_status,$sub_balance,$sub_msisdn,$host,$resale)=@sql_record;
@@ -428,6 +425,8 @@ if ($sub_id>0){#if found subscriber
 			&response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'OK',"CHECK_ONLY $XML_KEYS{cdr_id}");
 			my $SQL=qq[UPDATE cc_card set phone="$msisdn" where id=$sub_id];
 			my $sql_result=&SQL($SQL);
+			my $LU_H_result=&LU_H;#track sim card LU history
+			&response('LOG','MAIN-LU-H-RETURN',"$LU_H_result");
 			return $sub_id;
 		}#case 1
 		case 2 {#new
@@ -827,6 +826,7 @@ my $msrn=0;
 my $time=timelocal(localtime());
 our $transaction_id=$time.int(rand(1000));
 my ($code,$query,$host,$msisdn,$message_code,$options,$options1)=@_;
+$message_code='EMPTY' if !$message_code;
 #
 $host='http://api2.globalsimsupport.com/WebAPI/C9API.aspx?' if !$host;
 #
@@ -860,19 +860,27 @@ switch ($code){
 				$message=~s/_AMOUNT_/$options1/;
 				$message=~s/_CN_/$options/;
 			}#if message_code PMNT
-		$message=uri_escape($message);
+			$message=uri_escape($message);
 		$URL=qq[transaction_id=$transaction_id&ussdto=$msisdn&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
 		&response('LOG',"$code-URL-SET","$URL");
 	}#case sendussd
 	#
 	case "SIG_SendSMSMT" {#send sms MT to sub
 		if ($message_code=~/^pmnt/){#USSD for PMNT
-		my $SQL=qq[SELECT CONCAT('%2B',phone) FROM cc_card where username="$options"];
-		my @sql_record=&SQL($SQL);
-		$msisdn=$sql_record[0];
-		$message=~s/_AMOUNT_/$options1/;
-		$message=~s/_CN_/$options/;
+			my $SQL=qq[SELECT CONCAT('%2B',phone) FROM cc_card where username="$options"];
+			my @sql_record=&SQL($SQL);
+			$msisdn=$sql_record[0];
+			$message=~s/_AMOUNT_/$options1/;
+			$message=~s/_CN_/$options/;
 		}#if message_code PMNT
+		if ($message_code=~/^mcc/){#USSD for MCC
+		my ($IN,$OUT,$SMS,$EX)=split(':',$options1);
+				$message=~s/_CN_/$options/;
+				$message=~s/_IN_/$IN/;
+				$message=~s/_OUT_/$OUT/;
+				$message=~s/_SMS_/$SMS/;
+				$message=~s/_NO_/$EX/;
+			}#if message_code PMNT
 		$message=uri_escape($message);
 		$URL=qq[transaction_id=$transaction_id&smsto=$msisdn&smsfrom=ruimtools&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
 		&response('LOG',"$code-URL-SET","$URL");
@@ -1192,9 +1200,20 @@ sub LU_H{
 use vars qw(%Q);
 my $SQL='';
 if (($Q{imsi})&&($Q{mnc})&&($Q{mcc})&&($Q{request_type})){#if signaling request
-$SQL=qq[UPDATE cc_card set country=(select countrycode from cc_country, cc_mnc where countryname=country and mcc="$Q{mcc}" limit 1), zipcode="$Q{mcc} $Q{mnc}", tag=(select mno from cc_mnc where mnc="$Q{mnc}" and mcc="$Q{mcc}") where useralias="$Q{imsi}" or firstname="$Q{imsi}"];
-my $sql_result=&SQL($SQL);
-return $sql_result; 
+$SQL=qq[UPDATE cc_card set country=(select countrycode from cc_country, cc_mnc where countryname=country and mcc="$Q{mcc}" limit 1), zipcode="$Q{mcc} $Q{mnc}", tag=(select mno from cc_mnc where mnc="$Q{mnc}" and mcc="$Q{mcc}") where (useralias="$Q{imsi}" or firstname="$Q{imsi}") and country!=(select countrycode from cc_country, cc_mnc where countryname=country and mcc="$Q{mcc}" limit 1)];
+my @sql_result=&SQL($SQL);
+# SEND WELCOME SMS
+my $UPDATE_result=$sql_result[0];
+$UPDATE_result=0 if $sql_result[0] eq '0E0';
+if ($UPDATE_result eq '1'){#if subscriber change country
+$SQL=qq[SELECT countryname,rates from cc_country where countrycode=(select country from cc_card where useralias="$Q{imsi}" or firstname="$Q{imsi}")];
+my @sql_result=&SQL($SQL);
+my $countryname=$sql_result[0];
+my $countryrate=$sql_result[1];
+my $USSD_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'mcc_new',"$countryname","$countryrate");
+}#if change country
+#
+return $sql_result[0]; 
 }#end if signaling
 }# END sub LU_H
 #
