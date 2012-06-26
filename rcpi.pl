@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 260612rev.30.5 CNG_MCC';
+my $REV='API Server 260612rev.30.6 MCS';
 ##
 #################################################################
 ## 
@@ -389,7 +389,10 @@ elsif($ACTION_TYPE eq 'LOG'){
 	}#ACTION TYPE LOG
 	elsif($ACTION_TYPE eq 'LOGDB'){
 		use vars qw($INNER_TID);
-		my $SQL=qq[INSERT INTO cc_transaction (`id`,`type`,`inner_tid`,`transaction_id`,`IMSI`,`status`,`info`) values(NULL,"$RESPONSE_TYPE",$INNER_TID,"$RONE","$RSEC","$RTHI","$RFOUR")];
+		my ($s, $usec) = gettimeofday();
+		my $mcs=$s.$usec;
+		my $timer=int($mcs-$INNER_TID);
+		my $SQL=qq[INSERT INTO cc_transaction (`id`,`type`,`inner_tid`,`transaction_id`,`IMSI`,`status`,`info`,`timer`) values(NULL,"$RESPONSE_TYPE",$INNER_TID,"$RONE","$RSEC","$RTHI","$RFOUR",$timer)];
 		&SQL($SQL) if $debug<=3;
 		my $LOG='';
 		$LOG="[$now]-[API-LOGDB]: $SQL\n" if $debug==4;
