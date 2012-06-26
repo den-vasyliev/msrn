@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 260612rev.30.6 MCS';
+my $REV='API Server 260612rev.30.7 MCS';
 ##
 #################################################################
 ## 
@@ -84,10 +84,15 @@ use vars qw($sock);
 #
 our $new_sock = $sock->accept();
 #
+our $INNER_TID;
+my ($s, $usec) = gettimeofday();
+$INNER_TID=$s.$usec;
+&response('LOG',"API-SOCKET-OPEN","##################################################");
+#
 my $sockaddr= getpeername($new_sock);
 my ($port, $iaddr) = sockaddr_in($sockaddr);
 our $ip_address= inet_ntoa($iaddr);
-&response('LOG',"API-SOCKET-OPEN","SUCCESS $port $ip_address ##################################################");
+&response('LOG',"API-SOCKET-OPEN","SUCCESS $port $ip_address");
 #
 ########## READING INCOMING REQUEST FROM PROXY ##################
 #
@@ -110,16 +115,13 @@ if ($PROXY_REQUEST =~/897234jhdln328sLUV/){
 ## Main procedure to control all functions
 #################################################################
 sub main{
-use vars qw($PROXY_REQUEST);
+use vars qw($PROXY_REQUEST $INNER_TID);
 if ($PROXY_REQUEST ne 'EMPTY'){
 	our %XML_KEYS=&XML_PARSE($PROXY_REQUEST,'PROXY');
 	my $qkeys= keys %XML_KEYS;
 	&response('LOG','MAIN-XML-PARSE-RETURN',$qkeys);
 		if ($qkeys){#if kyes>0
 		my $IN_SET='';
-		our $INNER_TID;
-		my ($s, $usec) = gettimeofday();
-		$INNER_TID=$s.$usec;
 		$IN_SET="$XML_KEYS{msisdn}:$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}" if  $XML_KEYS{msisdn};
 		$IN_SET=$IN_SET.":$XML_KEYS{code}:$XML_KEYS{sub_code}" if $XML_KEYS{code};
 		$IN_SET=$IN_SET."$XML_KEYS{ident}:$XML_KEYS{amount}" if $XML_KEYS{salt};
@@ -354,7 +356,13 @@ else{#if no result code
 #################################################################
 sub response{
 #	
+use vars qw($INNER_TID);
+my $timer='';
+my ($s, $usec) = gettimeofday();
+my $mcs=$s.$usec;
+$timer=int($mcs-$INNER_TID) if $INNER_TID;
 my $now = localtime;
+
 open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log');
 #
 my ($ACTION_TYPE,$RESPONSE_TYPE,$RONE,$RSEC,$RTHI,$RFOUR)=@_;
@@ -383,15 +391,11 @@ my $now = localtime;
 	}#elsif ERROR
 }#ACTION TYPE ne LOG
 elsif($ACTION_TYPE eq 'LOG'){
-	my	$LOG="[$now]-[API-LOG-$RESPONSE_TYPE]: $RONE\n";
+	my	$LOG="[$now]-[$timer]-[API-LOG-$RESPONSE_TYPE]: $RONE\n";
 	print LOGFILE $LOG;	
 	print $LOG if $debug>=3;
 	}#ACTION TYPE LOG
 	elsif($ACTION_TYPE eq 'LOGDB'){
-		use vars qw($INNER_TID);
-		my ($s, $usec) = gettimeofday();
-		my $mcs=$s.$usec;
-		my $timer=int($mcs-$INNER_TID);
 		my $SQL=qq[INSERT INTO cc_transaction (`id`,`type`,`inner_tid`,`transaction_id`,`IMSI`,`status`,`info`,`timer`) values(NULL,"$RESPONSE_TYPE",$INNER_TID,"$RONE","$RSEC","$RTHI","$RFOUR",$timer)];
 		&SQL($SQL) if $debug<=3;
 		my $LOG='';
