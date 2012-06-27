@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 270612rev.31.7 SHA512';
+my $REV='API Server 270612rev.31.8 CURL';
 ##
 #################################################################
 ## 
@@ -18,6 +18,7 @@ use Digest::SHA qw(hmac_sha512_hex);
 use URI::Escape;
 use Switch;
 use POSIX;
+use LWP::UserAgent;
 use Time::Local;
 use Time::HiRes qw(gettimeofday);
 use IO::File;
@@ -27,7 +28,8 @@ use strict;
 no warnings 'once';
 ########## END OF MODULES #######################################
 #
-our $curl='/usr/bin/curl -k -f -s -m 10';
+our $lwpcurl = LWP::Curl->new();
+#our $curl='/usr/bin/curl -k -f -s -m 10';
 #
 ##############################################
 ## MAKE FORK AND CHROOT
