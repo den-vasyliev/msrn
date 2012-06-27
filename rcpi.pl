@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 260612rev.30.7 MCS';
+my $REV='API Server 270612rev.31.7 SHA512';
 ##
 #################################################################
 ## 
@@ -14,7 +14,7 @@ use Data::Dumper;
 use IO::Socket;
 use IO::Select;
 use XML::Simple;
-use Digest::SHA1;
+use Digest::SHA qw(hmac_sha512_hex);
 use URI::Escape;
 use Switch;
 use POSIX;
@@ -38,7 +38,7 @@ die "Couldn't fork: $!" unless defined($pid);
 POSIX::setsid() or die "Can't start a new session: $!";
 our $exit = 0;
 #
-my $PIDFILE = new IO::File ;
+my $PIDFILE = new IO::File;
 $PIDFILE->open(">/opt/ruimtools/tmp/rcpi.pid");
 print $PIDFILE $$;
 $PIDFILE->close();
@@ -66,6 +66,9 @@ until ($exit) {
 if(@ARGV){our $debug=$ARGV[0]}else{use vars qw($debug );$debug=3}
 #################################################################
 #
+our $LOGFILE = new IO::File;
+$LOGFILE->open('>>/opt/ruimtools/log/rcpi.log');
+#
 ########## OPEN MAIN SOCKET ##########
 my $HOST='127.0.0.1';
 my $PORT='35001';
@@ -80,26 +83,28 @@ our $dbh = DBI->connect('DBI:mysql:msrn', 'msrn', 'msrn');
 our $sock = new IO::Socket::INET (LocalHost => $HOST,LocalPort => $PORT,Proto => 'tcp',Listen => 10,ReuseAddr => 1,);
 #
 while(1) {
-use vars qw($sock);
+use vars qw($sock $LOGFILE);
 #
 our $new_sock = $sock->accept();
+$LOGFILE->open('>>/opt/ruimtools/log/rcpi.log');
 #
 our $INNER_TID;
 my ($s, $usec) = gettimeofday();
+my $format = "%06d"; 
+$usec=sprintf($format,$usec);
 $INNER_TID=$s.$usec;
 &response('LOG',"API-SOCKET-OPEN","##################################################");
 #
 my $sockaddr= getpeername($new_sock);
-my ($port, $iaddr) = sockaddr_in($sockaddr);
+our ($port, $iaddr) = sockaddr_in($sockaddr);
 our $ip_address= inet_ntoa($iaddr);
-&response('LOG',"API-SOCKET-OPEN","SUCCESS $port $ip_address");
 #
 ########## READING INCOMING REQUEST FROM PROXY ##################
 #
 while(our $PROXY_REQUEST=<$new_sock>) {
 
 if ($PROXY_REQUEST =~/897234jhdln328sLUV/){
-	&response('LOG','SOCKET',"OPEN $new_sock");
+	&response('LOG','API-SOCKET',"OPEN $new_sock $port $ip_address");
 	&response('LOG','XML-KEY',"OK");
 }else{#NO XML
 	print $new_sock &response('LU_CDR','ERROR','INCORRECT XML-KEY','0');
@@ -109,13 +114,18 @@ if ($PROXY_REQUEST =~/897234jhdln328sLUV/){
 #
 ########## CALL MAIN ############################################
 #
+
 &main();
+&response('LOG','SOCKET',"CLOSE $new_sock");
+&response('LOG',"API-SOCKET-CLOSE","##################################################");
+$new_sock->shutdown(2);
+$LOGFILE->close;
 #
 ########## MAIN #################################################
 ## Main procedure to control all functions
 #################################################################
 sub main{
-use vars qw($PROXY_REQUEST $INNER_TID);
+use vars qw($PROXY_REQUEST $INNER_TID $LOGFILE);
 if ($PROXY_REQUEST ne 'EMPTY'){
 	our %XML_KEYS=&XML_PARSE($PROXY_REQUEST,'PROXY');
 	my $qkeys= keys %XML_KEYS;
@@ -184,19 +194,18 @@ my @QUERY='';
 #
 eval {#error exceprion
 our $REQUEST=XML::Simple->new()->XMLin($REQUEST_LINE); 
-our $DUMPER=Dumper (XML::Simple->new()->XMLin($REQUEST_LINE));
-#our %DUMPER_HESH=Dumper (XML::Simple->new()->XMLin($REQUEST_LINE));
+our $DUMPER=Dumper (XML::Simple->new()->XMLin($REQUEST_LINE)) if $debug>3;
 };warn $@ if $@; return "XML not well-formed" if $@;
 #
 use vars qw($REQUEST $DUMPER);
-&response('LOG',"XML-PARSE-REQUEST-$REQUEST_OPTION","$REQUEST_LINE") if $debug>=3;
+&response('LOG',"XML-PARSE-REQUEST-$REQUEST_OPTION","$REQUEST_LINE") if $debug>3;
 #
 our $REMOTE_HOST=$REQUEST->{authentication}{host};
 #
 switch ($REQUEST_OPTION){
 	case 'PROXY' {
 		if ($REQUEST->{query}){#if request in 'query' format
-			&response('LOG',"XML-PARSE-DUMPER","$DUMPER")if $debug>=3;;
+			&response('LOG',"XML-PARSE-DUMPER","$DUMPER")if $debug>3;
 			our %Q=();
 			my @QUERY=split(' ',$REQUEST->{query});
 				foreach my $pair(@QUERY){
@@ -204,7 +213,7 @@ switch ($REQUEST_OPTION){
 					$Q{$key}=$val;#All variables from request
 				}#foreach
 				my $qkeys = keys %Q;
-				&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION",$qkeys);
+				&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION",$qkeys)if $debug>3;;
 				return %Q;
 		}#if request
 		elsif($REQUEST->{payment}){#if request in 'payments' format
@@ -312,12 +321,13 @@ if( $PASS==0){
 ## Accept SQL input
 ## Return SQL records or mysql error
 #################################################################
-	sub SQL{ 
+sub SQL{ 
+use vars qw($LOGFILE);
 my $SQL=qq[@_];
 my $now = localtime;
-open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log') or die $! if $debug>=2;
-print LOGFILE "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=2; #DONT CALL VIA &RESPONSE
-print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=3;
+#open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log') or die $! if $debug>=2;
+print $LOGFILE "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>3; #DONT CALL VIA &RESPONSE
+print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>3;
 #
 my ($rc, $sth);
 our (@result, $new_id);
@@ -356,52 +366,53 @@ else{#if no result code
 #################################################################
 sub response{
 #	
-use vars qw($INNER_TID);
-my $timer='';
+use vars qw($INNER_TID $LOGFILE);
+my $timer='0';
 my ($s, $usec) = gettimeofday();
+my $format = "%06d"; 
+$usec=sprintf($format,$usec);
 my $mcs=$s.$usec;
 $timer=int($mcs-$INNER_TID) if $INNER_TID;
 my $now = localtime;
-
-open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log');
+#
+#open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log');
 #
 my ($ACTION_TYPE,$RESPONSE_TYPE,$RONE,$RSEC,$RTHI,$RFOUR)=@_;
 if($ACTION_TYPE!~m/^LO/){
 	my $SQL=qq[SELECT response FROM cc_actions where code="$ACTION_TYPE"];
 	my @sql_record=&SQL($SQL);
 my	$XML=$sql_record[0];
-	#CDR_RESPONSE::CDR_ID::CDR_STATUS MOC_response::TRANSACTION_ID::DISPLAY_MESSAGE
 my	($ROOT,$SUB1,$SUB2,$SUB3)=split('::',$XML);
 my $now = localtime;
 	if($RESPONSE_TYPE eq 'OK'){
-		my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1><$SUB2>$RSEC</$SUB2><$SUB3>$RTHI</$SUB3></$ROOT>\n] if ($RTHI ne '');
-		$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1><$SUB2>$RSEC</$SUB2></$ROOT>\n] if (($RSEC ne '')&&($RTHI eq ''));
+		my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1><$SUB2>$RSEC</$SUB2><$SUB3>$RTHI</$SUB3></$ROOT>\n] if ($RTHI);
+		$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1><$SUB2>$RSEC</$SUB2></$ROOT>\n] if (($RSEC ne '')&&(!$RTHI));
 		$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1></$ROOT>\n] if ($RSEC eq '');
-		my $LOG="[$now]-[API-RESPONSE-SENT]: $OK\n"; 
-		print LOGFILE $LOG if $debug<=4;
+		my $LOG="[$now]-[$timer]-[API-RESPONSE-SENT]: $OK\n"; 
+		print $LOGFILE $LOG if (($debug<=4)&&($debug!=0));
 		print $LOG if $debug>=3; 
 		return $OK;
 	}#if OK
 	elsif ($RESPONSE_TYPE eq 'ERROR'){
 		my	$ERROR=qq[<?xml version="1.0" ?><Error><Error_Message>$RONE</Error_Message></Error>\n];
-		my $LOG="[$now]-[API-RESPONSE-SENT]: $ERROR\n";
-		print LOGFILE $LOG if $debug<=4;
+		my $LOG="[$now]-[$timer]-[API-RESPONSE-SENT]: $ERROR\n";
+		print $LOGFILE $LOG if (($debug<=4)&&($debug!=0));
 		print $LOG if $debug>=3;
 		return $ERROR;
 	}#elsif ERROR
 }#ACTION TYPE ne LOG
 elsif($ACTION_TYPE eq 'LOG'){
 	my	$LOG="[$now]-[$timer]-[API-LOG-$RESPONSE_TYPE]: $RONE\n";
-	print LOGFILE $LOG;	
+	print $LOGFILE $LOG if (($debug<=4)&&($debug!=0));
 	print $LOG if $debug>=3;
 	}#ACTION TYPE LOG
 	elsif($ACTION_TYPE eq 'LOGDB'){
 		my $SQL=qq[INSERT INTO cc_transaction (`id`,`type`,`inner_tid`,`transaction_id`,`IMSI`,`status`,`info`,`timer`) values(NULL,"$RESPONSE_TYPE",$INNER_TID,"$RONE","$RSEC","$RTHI","$RFOUR",$timer)];
 		&SQL($SQL) if $debug<=3;
 		my $LOG='';
-		$LOG="[$now]-[API-LOGDB]: $SQL\n" if $debug==4;
-		$LOG="[$now]-[API-LOGDB]: $RESPONSE_TYPE $RONE\n" if $debug<=3;
-		print LOGFILE $LOG if $debug<=4;
+		$LOG="[$now]-[$timer]-[API-LOGDB]: $SQL\n" if $debug==4;
+		$LOG="[$now]-[$timer]-[API-LOGDB-TRANSACTION]: $RESPONSE_TYPE $RONE\n" if (($debug<=3)&&($debug!=0));
+		print $LOGFILE $LOG if $debug<=4;
 		print $LOG if $debug>=3;
 	}#ACTION TYPE LOGDB
 #close LOGFILE;
@@ -1113,45 +1124,43 @@ my $sql_result=&SQL($SQL);
 }#else if resale_price
 }# END bill_resale #############
 #
+### SUB AUTH
+# $data signed by $key = $digest
+##
 sub auth{
 use vars qw(%Q $REMOTE_HOST);
-my ($KEY,$type,$agent,$dgst,$ikey)=@_;
-my $md5=qq[echo _KYES_ |/usr/bin/openssl dgst $dgst];
-my $md5_result='';
-our ($reseller_name,$public_key,$auth_key);
-&response('LOG',"RC-API-$type-AUTH","$REMOTE_HOST:$agent:$KEY:$dgst");
+my ($data,$type,$agent,$dgst,$sign)=@_;
+#my $md5=qq[echo _KYES_ |/usr/bin/openssl dgst $dgst];
+our ($digest,$agent_login,$mch_name,$rate,$key,$sgn);
+&response('LOG',"RC-API-$type-AUTH","$REMOTE_HOST:$agent:$data:$dgst");
 switch ($type){#select auth type
 	case "RESALE"{#resale auth
-my $SQL=qq[SELECT login,firstname,lastname from cc_agent where firstname="$KEY" and active=1];
-my @sql_record=&SQL($SQL);
-($reseller_name,$public_key,$ikey)=@sql_record;
-$md5=~s/_KYES_/$REMOTE_HOST$reseller_name$public_key/;
+		my $SQL=qq[SELECT login, firstname, lastname from cc_agent where firstname="$data" and active=1];
+		my @sql_record=&SQL($SQL);
+		($agent_login,$key,$sign)=@sql_record;
+		$data=$REMOTE_HOST.$agent_login;
+		#$md5=~s/_KYES_/$REMOTE_HOST$reseller_name$public_key/;
 	}#case resale
-###
 	case "PAYMNT"{#paymnt auth
-my $SQL=qq[SELECT name, auth_key, rate from cc_epaymnter where host="$agent"];
-my @sql_record=&SQL($SQL);
-#$md5=qq[echo -n '_KYES_' |/usr/bin/openssl dgst $dgst];
-(our $mch_name, my $auth_key, our $rate)=@sql_record;
-$md5=~s/_KYES_/-n $KEY/;
-$md5="$md5 $auth_key";
-}#case paymnt
+		my $SQL=qq[SELECT name, auth_key, rate from cc_epaymnter where host="$agent"];
+		my @sql_record=&SQL($SQL);
+		($mch_name,$key,$rate)=@sql_record;
+		#$md5=~s/_KYES_/-n $KEY/;
+		#$md5="$md5 $auth_key";
+	}#case paymnt
 else{
-&response('LOG',"RC-API-AUTH-RETURNED","Error: UNKNOWN TYPE $type");
-}#end else switch type
+	&response('LOG',"RC-API-AUTH-RETURNED","Error: UNKNOWN TYPE $type");
+	}#end else switch type
 }#end switch type 
-#
-&response('LOG',"RC-API-$type-MD5","$REMOTE_HOST:$agent:$KEY");
-$md5_result=`$md5`;
-chomp($md5_result);
-&response('LOG',"RC-API-$type-MD5-RESULT","$md5 $md5_result") if $debug>=3;
-#
-&response('LOG',"RC-API-$type-KEYS-CHECK","$md5_result eq $ikey") if $debug>=3;
-if ($md5_result eq $ikey){#if md5 OK
+$digest=hmac_sha512_hex("$data","$key");
+$dgst=substr($digest,0,5);
+$sgn=substr($sign,0,5);
+&response('LOG',"RC-API-$type-DIGEST-CHECK","$dgst eq $sgn") if $debug>=3;
+if ($digest eq $sign){#if ok
 &response('LOG','RC-API-AUTH',"OK");
 return 0;
-}#end if md5
-else{#md5 != auth_key
+}#end if ok
+else{#digest != sign
 &response('LOG','RC-API-AUTH',"NO AUTH");
 return -1;
 	}#else if auth OK
@@ -1367,8 +1376,9 @@ print $new_sock &response('msisdn_allocation','OK',$Q{transactionid},$sql_result
 &response('LOGDB','msisdn_allocation',1,$Q{IMSI},'RSP',"$Q{MSISDN} $sql_result");	
 }#end sub msisdn_allocation
 #
-&response('LOG','SOCKET',"CLOSE $new_sock ##################################################");
-$new_sock->shutdown(2);
+#&response('LOG','SOCKET',"CLOSE $new_sock ##################################################");
+#close $new_sock;
+#$new_sock->shutdown(2);
 ################################################################
 }#new_sock
 }#while(1)
