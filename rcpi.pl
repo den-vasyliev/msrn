@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 270612rev.31.7 SHA512';
+my $REV='API Server 270612rev.31.7 HFX_997';
 ##
 #################################################################
 ## 
@@ -977,10 +977,11 @@ switch ($code){
 		my $auth_result=&auth($Q{auth_key},'RESALE',$Q{reseller},'-md5');
 		if ($auth_result==0){
 		&response('LOG','RC-API-CMD',"GET_MSRN");
-		my $SQL=qq[SELECT id,traffic_target from cc_card where (useralias="$Q{imsi}" or firstname="$Q{imsi}")];
+		my $SQL=qq[SELECT id,traffic_target,id_seria from cc_card where (useralias="$Q{imsi}" or firstname="$Q{imsi}")];
 		my @sql_record=&SQL($SQL);
 		my $sub_id=$sql_record[0];
 		my $traffic_target=$sql_record[1];
+		my $card_seria=$sql_record[2];
 		my $resale_TID="$Q{transactionid}";
 		my $msrn=&SENDGET('SIG_GetMSRN',"$imsi");
 		&bill_resale($Q{auth_key},'SIG_GetMSRN');
@@ -991,9 +992,9 @@ switch ($code){
 		print $new_sock $msrn if $options eq 'cleartext';
 		return 'CMD 1';}#if resellers subscriber
 			else{#if CFU subscriber
-		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_MSRN CFU $code $Q{auth_key}");
+		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_MSRN CFU:$card_seria $code $Q{auth_key}");
 		my $resale_TID="$Q{transactionid}";
-		my $limit=&SENDGET('SIG_GetTIME',$sub_id,'https://127.0.0.1',$msrn);
+		my $limit=&SENDGET('SIG_GetTIME',$sub_id,'https://127.0.0.1',$msrn) if $card_seria eq '2';
 		print $new_sock &response('rc_api_cmd','OK',$resale_TID,"$msrn","$limit") if $options ne 'cleartext';
 		$msrn=~s/\+// if $options eq 'cleartext';#cleartext for ${EXTEN} usage
 		print $new_sock "$resale_TID:$msrn:$limit" if $options eq 'cleartext';
