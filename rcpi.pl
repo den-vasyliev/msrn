@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 270612rev.31.8 CURL';
+my $REV='API Server 270612rev.31.10 LWP_HTTPS';
 ##
 #################################################################
 ## 
@@ -16,9 +16,9 @@ use IO::Select;
 use XML::Simple;
 use Digest::SHA qw(hmac_sha512_hex);
 use URI::Escape;
+use LWP::UserAgent;
 use Switch;
 use POSIX;
-use LWP::UserAgent;
 use Time::Local;
 use Time::HiRes qw(gettimeofday);
 use IO::File;
@@ -28,7 +28,7 @@ use strict;
 no warnings 'once';
 ########## END OF MODULES #######################################
 #
-our $lwpcurl = LWP::Curl->new();
+our $lwp = LWP::UserAgent->new;
 #our $curl='/usr/bin/curl -k -f -s -m 10';
 #
 ##############################################
@@ -51,7 +51,8 @@ sub signal_handler {use vars qw($exit); $exit = 1};
 $SIG{HUP} = \&phoenix;
 # trap $SIG{PIPE}
 sub phoenix {
-print("RESTARTING...");
+use vars qw($debug);
+print("RELOAD CONFIGURATION...");
 my $SELF = $0;   # needs full path
 exec($SELF) or die "Couldn't restart: $!\n";
 }
@@ -352,7 +353,8 @@ else{#SELECT request
 if($rc){#if result code
 	our $sql_aff_rows =$rc;
 	#my $sql_record = @result;
-	&response('LOG','SQL-MYSQL-RETURNED',"@result $rc $new_id");
+	&response('LOG','SQL-MYSQL-RETURNED',"@result $rc $new_id")if $debug>3;
+	&response('LOG','SQL-MYSQL-RETURNED',$#result+1);
 	return @result; 
 }#if result code
 else{#if no result code
@@ -839,7 +841,7 @@ if ($sql_result[0]>=1){
 ## Return MSRN or NULL, Status
 #################################################################
 sub SENDGET{
-use vars qw($curl);
+use vars qw($lwp);
 #
 my $URL='';
 my $msrn=0;
@@ -848,7 +850,7 @@ our $transaction_id=$time.int(rand(1000));
 my ($code,$query,$host,$msisdn,$message_code,$options,$options1)=@_;
 $message_code='EMPTY' if !$message_code;
 #
-$host='http://api2.globalsimsupport.com/WebAPI/C9API.aspx?' if !$host;
+$host='https://api2.globalsimsupport.com/WebAPI/C9API.aspx?' if !$host;
 #
 my $SQL=qq[SELECT request, from_unixtime($time),response FROM cc_actions where code="$code" or code="$message_code"];#or used for USSD msg
 my @sql_record=&SQL($SQL);
@@ -862,14 +864,14 @@ switch ($code){
 		$URL_QUERY=~s/_DEST_/$msisdn/;
 		$URL_QUERY=~s/_SUBID_/$query/;
 		$URL=$URL_QUERY;
-		&response('LOG',"$code-URL-SET","$URL");
+		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 		$query=$Q{'imsi'};#for cc_transaction usage
 	}#case gettime
 	case "SIG_GetMSRN" {# get msrn
-		$msrn=&reuse_msrn($query) if $options eq '126';#code 126 checks is not safety for changes
-		&response('LOG',"$code-REUSE-GET","$msrn");
+	#reserved for future	$msrn=&reuse_msrn($query) if $options eq '126';#code 126 checks is not safety for changes
+	#reserved for future	&response('LOG',"$code-REUSE-GET","$msrn");
 		$URL=qq[transaction_id=$transaction_id&query=$query&$URL_QUERY&timestamp=$timestamp] if $msrn==0;
-		&response('LOG',"$code-URL-SET","$URL");
+		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case getmsrn
 	#
 	case "SIG_SendUSSD" {#send ussd
@@ -882,7 +884,7 @@ switch ($code){
 			}#if message_code PMNT
 			$message=uri_escape($message);
 		$URL=qq[transaction_id=$transaction_id&ussdto=$msisdn&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
-		&response('LOG',"$code-URL-SET","$URL");
+		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case sendussd
 	#
 	case "SIG_SendSMSMT" {#send sms MT to sub
@@ -900,10 +902,11 @@ switch ($code){
 				$message=~s/_OUT_/$OUT/;
 				$message=~s/_SMS_/$SMS/;
 				$message=~s/_NO_/$EX/;
+				$msisdn='%2B'.$msisdn;
 			}#if message_code PMNT
 		$message=uri_escape($message);
 		$URL=qq[transaction_id=$transaction_id&smsto=$msisdn&smsfrom=ruimtools&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
-		&response('LOG',"$code-URL-SET","$URL");
+		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case sendsms MT
 	#
 	case "SIG_SendSMS" {#send sms MO to any MSISDN
@@ -922,28 +925,40 @@ switch ($code){
 		$message=~s/_CODE_/$options/;
 		$message=~s/_SUBCODE_/$options1/;
 		$URL=qq[$URL_QUERY;$message];
-		&response('LOG',"$code-URL-SET","$URL");
+		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case sendresale
 	else{
 		return 0;
 	}#else switch code
 }#switch code
 #
-my $SENDGET=qq[$host$URL] if $URL;
+our $SENDGET=qq[$host$URL] if $URL;
 #
-&response('LOG',"SENDGET-$code-URL","$SENDGET") if $debug>=3;
 &response('LOGDB',"$code","$transaction_id","$query",'REQ',"$SENDGET $msrn"); 
 #
-&response('LOG',"SENDGET-$code-URL","$curl $SENDGET");
-my @XML=`$curl "$SENDGET"` if $URL;
+if ($URL){
+eval {use vars qw($SENDGET); alarm(10); local $SIG{ALRM} = sub { die "SSL timeout\n" }; &response('LOG',"SENDGET-$code-LWP-REQ","$SENDGET");
+my $LWP_response = $lwp->get($SENDGET);
+if ($LWP_response->is_success) { our @XML=$LWP_response->decoded_content; }#if success
+else{ die $LWP_response->status_line; }#else success response
+};#eval lwp
+alarm(0);
+	if ($@) {#if errors
+		if ($@ =~ /SSL timeout/){ warn "Request timed out";	}#if timeout
+		else{ warn "Error in request: $@"; }#else other errors
+	}#if erorrs
+}#if URL
+#my $content = $lwp->get($SENDGET);
+#my @XML=$content->decoded_content if $URL;
 #
+use vars qw(@XML);
 if (@XML){
 	&response('LOG',"$code-RESPOND","@XML") if $debug>=3;
 	my $SENDGET_result=&XML_PARSE("@XML",$code);
 	&response('LOGDB',$code,"$transaction_id","$query",'RSP',"$SENDGET_result") if $SENDGET_result;
 	&response('LOGDB',$code,"$transaction_id","$query",'ERROR','SENDGET NO RESPOND') if !$SENDGET_result;
 	return $SENDGET_result;
-}#if curl return
+}#if lwp return
 elsif($msrn){
 	&response('LOG',"$code-REQUEST","REUSE $msrn");
 	&response('LOGDB',$code,"$transaction_id","$query",'REUSE',"$msrn");
@@ -951,7 +966,7 @@ elsif($msrn){
 }#elsif msrn
 else{# timeout
 	&response('LOG',"$code-REQUEST","Timed out 5 sec with socket");
-	&response('LOGDB',$code,"$transaction_id","$query",'ERROR','Timed out 5 sec with socket');
+	&response('LOGDB',$code,"$transaction_id","$query",'ERROR','Timed out 10 sec with socket');
 	return 0;
 }#end else
 }########## END sub GET_MSRN ####################################
@@ -979,10 +994,11 @@ switch ($code){
 		my $auth_result=&auth($Q{auth_key},'RESALE',$Q{reseller},'-md5');
 		if ($auth_result==0){
 		&response('LOG','RC-API-CMD',"GET_MSRN");
-		my $SQL=qq[SELECT id,traffic_target from cc_card where (useralias="$Q{imsi}" or firstname="$Q{imsi}")];
+		my $SQL=qq[SELECT id,traffic_target,id_seria from cc_card where (useralias="$Q{imsi}" or firstname="$Q{imsi}")];
 		my @sql_record=&SQL($SQL);
 		my $sub_id=$sql_record[0];
 		my $traffic_target=$sql_record[1];
+		my $card_seria=$sql_record[2];
 		my $resale_TID="$Q{transactionid}";
 		my $msrn=&SENDGET('SIG_GetMSRN',"$imsi");
 		&bill_resale($Q{auth_key},'SIG_GetMSRN');
@@ -993,9 +1009,9 @@ switch ($code){
 		print $new_sock $msrn if $options eq 'cleartext';
 		return 'CMD 1';}#if resellers subscriber
 			else{#if CFU subscriber
-		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_MSRN CFU $code $Q{auth_key}");
+		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_MSRN CFU:$card_seria $code $Q{auth_key}");
 		my $resale_TID="$Q{transactionid}";
-		my $limit=&SENDGET('SIG_GetTIME',$sub_id,'https://127.0.0.1',$msrn);
+		my $limit=&SENDGET('SIG_GetTIME',$sub_id,'https://127.0.0.1',$msrn) if $card_seria eq '2';
 		print $new_sock &response('rc_api_cmd','OK',$resale_TID,"$msrn","$limit") if $options ne 'cleartext';
 		$msrn=~s/\+// if $options eq 'cleartext';#cleartext for ${EXTEN} usage
 		print $new_sock "$resale_TID:$msrn:$limit" if $options eq 'cleartext';
@@ -1048,6 +1064,11 @@ switch ($code){
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$USSD_result") if $options ne 'cleartext';;
 		return 'CMD 4';
 	}#case get_session_time
+	case 'set_debug'{#set debug
+	$debug=$sub_code;
+	&response('LOG','RC-API-CMD',"SET_DEBUG to $debug");
+	return 'CMD 5';
+	}#case set debug
 	else {
 		&response('LOG','RC-API-CMD-UNKNOWN',"$code");
 		&response('LOGDB','CMD',"$Q{transactionid}","$Q{imsi}",'ERROR',"$code");
@@ -1134,7 +1155,8 @@ use vars qw(%Q $REMOTE_HOST);
 my ($data,$type,$agent,$dgst,$sign)=@_;
 #my $md5=qq[echo _KYES_ |/usr/bin/openssl dgst $dgst];
 our ($digest,$agent_login,$mch_name,$rate,$key,$sgn);
-&response('LOG',"RC-API-$type-AUTH","$REMOTE_HOST:$agent:$data:$dgst");
+&response('LOG',"RC-API-$type-AUTH","$REMOTE_HOST:$agent:$data:$dgst")if $debug>3;
+&response('LOG',"RC-API-$type-AUTH","$agent");
 switch ($type){#select auth type
 	case "RESALE"{#resale auth
 		my $SQL=qq[SELECT login, firstname, lastname from cc_agent where firstname="$data" and active=1];

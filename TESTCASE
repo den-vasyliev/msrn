@@ -1,7 +1,7 @@
 ####################################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 #
-# Test Cases for RCPI SERVER 240612.rev.17.9
+# Test Cases for RCPI SERVER 270612.rev.18.0
 #
 ####################################################
 #
@@ -19,7 +19,12 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A22%2A006500730074
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=SMSContent_CDR;sms_type=MO;timestamp=2012-06-19%2019%3A29%3A02;message_date=2012-06-19%2019%3A29%3A02;transactionid=20120619192902;cdr_id=1;carrierid=;sender=RuimTools;destination=380674014759;original_cli=447700079964;message=%D0%A2%D0%B5%D1%81%D1%825'
 ### END SMSContent_CDR
 #
-### AGENT CALL GRP
+### AGENT CALL GRP + CFU CHECK
+# CFU conditions:
+# traffic_target != auth_key resaller
+# CFU seria == 2
+# Return msrn & session limit
+###
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&imsi=234180000379608&code=1&sub_code=0&transactionid=100&reseller=RUIMTOOLS&auth_key=ba23dce5dc2fdec04b2a25e162a2a455&options=cleartext'
 ### END AGENT CALL GRP
 #
@@ -54,7 +59,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=ping'
 ### END CMD PING
 #
 ### SIG LU_CDR
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000379608;mcc=412;mnc=40;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
+q
 <?xml version="1.0" ?><CDR_response><cdr_id>59526930</cdr_id><cdr_status>1</cdr_status></CDR_response>
 #
 curl 'http://127.0.0.1:8008/roamingcenter/?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000079890;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
@@ -82,7 +87,7 @@ curl "http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=0;imsi=0;co
 ### END CMD Get Resellers MSRN count get_resale_msrn R
 #
 ### PAYMNT
-curl -k -d 'xml=<?xml version="1.0" encoding="utf-8"?><payment id="82578"><ident>83f70c0184f79eea7c14a5d5b0e33dae5aa2992e</ident><status>5</status><amount>100</amount><currency>UAH</currency><timestamp>1339709504</timestamp><transactions><transaction id="117659"><mch_id>230</mch_id><srv_id>0</srv_id><amount>100</amount><currency>UAH</currency><type>10</type><status>11</status><code>00</code><desc>Лицевой счет 9671645459</desc><info>{"acc":"9671645459","amount":1}</info></transaction><transaction id="117660"><mch_id>230</mch_id><srv_id>0</srv_id><amount>100</amount><currency>UAH</currency><type>11</type><status>11</status><code>00</code><desc>Лицевой счет 9671645459</desc><info>{"acc":"9671645459","amount":1}</info></transaction></transactions><salt>1777e98da1bbfb143df54e7efc8ebd1210258d21</salt><sign>d19beb1368e8540d303134822f43babfda39548ae486719e2b0f4d201e805ae90665f0dc44913139c02c3f244528d2cadc8ee85d03633f659a4ba63ac6def0e1</sign></payment>' https://127.0.0.1/cgi-bin/api.pl
+curl -k -d 'xml=<?xml version="1.0" encoding="utf-8"?><payment id="82579"><ident>83f70c0184f79eea7c14a5d5b0e33dae5aa2992e</ident><status>5</status><amount>100</amount><currency>UAH</currency><timestamp>1339709504</timestamp><transactions><transaction id="117661"><mch_id>230</mch_id><srv_id>0</srv_id><amount>100</amount><currency>UAH</currency><type>10</type><status>11</status><code>00</code><desc>Лицевой счет 9671645459</desc><info>{"acc":"9671645459","amount":1}</info></transaction><transaction id="117662"><mch_id>230</mch_id><srv_id>0</srv_id><amount>100</amount><currency>UAH</currency><type>11</type><status>11</status><code>00</code><desc>Лицевой счет 9671645459</desc><info>{"acc":"9671645459","amount":1}</info></transaction></transactions><salt>1777e98da1bbfb143df54e7efc8ebd1210258d21</salt><sign>d19beb1368e8540d303134822f43babfda39548ae486719e2b0f4d201e805ae90665f0dc44913139c02c3f244528d2cadc8ee85d03633f659a4ba63ac6def0e1</sign></payment>' https://127.0.0.1/cgi-bin/api.pl
 ### END PAYMNT
 #
 ### CHECK CARD NUMBER
@@ -109,3 +114,7 @@ curl "http://127.0.0.1/cgi-bin/api.pl?request_type=SMSContent_CDR;sms_type=MO;ti
 ### GET SESSION TIME
 curl -k 'https://127.0.0.1/a2billing/admin/Public/RateEngine.php?called=380443736899&balance=0&id_cc_card=16'
 ### END GET SESSION TIME
+
+### SET DEBUG MODE
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=set_debug;sub_code=3'
+### END SET DEBUG MODE
