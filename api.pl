@@ -3,7 +3,7 @@
 ####################################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 #
-# API CGI for PROXY SERVER 260612rev.8.0
+# API CGI for PROXY SERVER 270612rev.9.0
 #
 ####################################################
 #
@@ -25,7 +25,7 @@ print "Content-Type: text/xml\n\n";
 #
 eval {#check for 10 sec timeout
 local $SIG{ALRM} = sub { die 'Timed Out'; }; 
-alarm 10;
+alarm 15;
 #
 ## LOGG ######################################
 my $remote_host=$query->remote_host();
@@ -86,5 +86,5 @@ close or die "close: $!";#close or die
 };#eval
 #
 alarm 0; # race condition protection 
-print qq[<?xml version="1.0" ?><Error><Error_Message>TIMED OUT 10 SECONDS</Error_Message></Error>\012] if ( $@ && $@ =~ /Timed Out/ );#timeout
+print qq[<?xml version="1.0" ?><Error><Error_Message>TIMED OUT 15 SECONDS</Error_Message></Error>\012] if ( $@ && $@ =~ /Timed Out/ );#timeout
 ### END ####################################

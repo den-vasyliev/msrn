@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 270612rev.31.10 LWP_HTTPS';
+my $REV='API Server 270612rev.31.11 THREADS';
 ##
 #################################################################
 ## 
@@ -28,38 +28,34 @@ use strict;
 no warnings 'once';
 ########## END OF MODULES #######################################
 #
-our $lwp = LWP::UserAgent->new;
-#our $curl='/usr/bin/curl -k -f -s -m 10';
-#
-##############################################
-## MAKE FORK AND CHROOT
-## chroot("/opt/ruimtools/") or die "Couldn't chroot to /opt/ruimtools: $!";
+#################################################################
+# MAKE FORK AND CHROOT
+#################################################################
+#chroot("/opt/ruimtools/") or die "Couldn't chroot to /opt/ruimtools: $!";
 our $pid = fork;
 exit if $pid;
 die "Couldn't fork: $!" unless defined($pid);
 POSIX::setsid() or die "Can't start a new session: $!";
-our $exit = 0;
-#
 my $PIDFILE = new IO::File;
 $PIDFILE->open(">/opt/ruimtools/tmp/rcpi.pid");
 print $PIDFILE $$;
 $PIDFILE->close();
+###############################################################
 #
-sub signal_handler {use vars qw($exit); $exit = 1};
-#
+###############################################################
+# SIG handle to reload configuration kill -HUP
+###############################################################
 #$SIG{INT} = $SIG{TERM}= 
 $SIG{HUP} = \&phoenix;
 # trap $SIG{PIPE}
 sub phoenix {
-use vars qw($debug);
 print("RELOAD CONFIGURATION...");
 my $SELF = $0;   # needs full path
 exec($SELF) or die "Couldn't restart: $!\n";
 }
-##############################################
+###############################################################
 #
-until ($exit) {
-########## DEBUG OPTIONS ###############################
+########## DEBUG OPTIONS ######################################
 # 1 - print INFO to LOG_FILE
 # 2 - print INFO&SQL to LOG_FILE
 # 3 - print INFO&DEBUG&SQL to STDOUT&LOG_FILE
@@ -69,10 +65,11 @@ until ($exit) {
 if(@ARGV){our $debug=$ARGV[0]}else{use vars qw($debug );$debug=3}
 #################################################################
 #
+########## LOG FILE #############################################
 our $LOGFILE = new IO::File;
 $LOGFILE->open('>>/opt/ruimtools/log/rcpi.log');
 #
-########## OPEN MAIN SOCKET ##########
+########## CONFIGURATION FOR MAIN SOCKET ########################
 my $HOST='127.0.0.1';
 my $PORT='35001';
 &response('LOG','API',"$REV Ready at $$ deb $debug");
@@ -83,52 +80,46 @@ our $dbh = DBI->connect('DBI:mysql:msrn', 'msrn', 'msrn');
 #################################################################
 #
 ########## LISTEN FOREVER #######################################
+# Multiplexing sockets handlers
+#################################################################
+#
 our $sock = new IO::Socket::INET (LocalHost => $HOST,LocalPort => $PORT,Proto => 'tcp',Listen => 10,ReuseAddr => 1,);
+our $read_set = new IO::Select($sock); 
+our $new_sock;
 #
-while(1) {
-use vars qw($sock $LOGFILE);
-#
-our $new_sock = $sock->accept();
-$LOGFILE->open('>>/opt/ruimtools/log/rcpi.log');
-#
-our $INNER_TID;
-my ($s, $usec) = gettimeofday();
-my $format = "%06d"; 
-$usec=sprintf($format,$usec);
-$INNER_TID=$s.$usec;
-&response('LOG',"API-SOCKET-OPEN","##################################################");
-#
-my $sockaddr= getpeername($new_sock);
-our ($port, $iaddr) = sockaddr_in($sockaddr);
-our $ip_address= inet_ntoa($iaddr);
-#
-########## READING INCOMING REQUEST FROM PROXY ##################
-#
-while(our $PROXY_REQUEST=<$new_sock>) {
-
-if ($PROXY_REQUEST =~/897234jhdln328sLUV/){
-	&response('LOG','API-SOCKET',"OPEN $new_sock $port $ip_address");
-	&response('LOG','XML-KEY',"OK");
-}else{#NO XML
-	print $new_sock &response('LU_CDR','ERROR','INCORRECT XML-KEY','0');
-	$new_sock->shutdown(2);
-	$PROXY_REQUEST='EMPTY';last;
-}#if VALIDATION
-#
-########## CALL MAIN ############################################
-#
-
-&main();
-&response('LOG','SOCKET',"CLOSE $new_sock");
-&response('LOG',"API-SOCKET-CLOSE","##################################################");
-$new_sock->shutdown(2);
-$LOGFILE->close;
-#
+while(1) {#forever
+		my ($read_handle_set) = IO::Select->select($read_set, undef, undef, undef);
+		#while(my @ready = $read_set->can_read) {
+		foreach $new_sock (@$read_handle_set) { 
+			if ($new_sock == $sock) {
+				my $new = $new_sock->accept();
+				$read_set->add($new);
+				print "RUIMTOOLS-$REV\n";
+			}else {#processing 
+					while(our $PROXY_REQUEST=<$new_sock>){
+						if ($PROXY_REQUEST =~/897234jhdln328sLUV/){
+							our $INNER_TID;
+							my ($s, $usec) = gettimeofday();my $format = "%06d";$usec=sprintf($format,$usec);$INNER_TID=$s.$usec;
+							&response('LOG',"API-SOCKET-OPEN","##################################################");
+							&response('LOG','SOCKET',"OPEN $new_sock");
+							&main();
+							&response('LOG','SOCKET',"CLOSE $new_sock");
+							&response('LOG',"API-SOCKET-CLOSE","##################################################");
+							$read_set->remove($new_sock);close($new_sock);
+						}else{ 
+							$read_set->remove($new_sock);close($new_sock);
+						}#else closed socket
+				}#while
+			}#else processing
+		}#foreach
+	#}#while ready
+} #while(1) 
 ########## MAIN #################################################
 ## Main procedure to control all functions
 #################################################################
 sub main{
-use vars qw($PROXY_REQUEST $INNER_TID $LOGFILE);
+use vars qw($PROXY_REQUEST $INNER_TID $LOGFILE $new_sock);
+our $lwp = LWP::UserAgent->new;
 if ($PROXY_REQUEST ne 'EMPTY'){
 	our %XML_KEYS=&XML_PARSE($PROXY_REQUEST,'PROXY');
 	my $qkeys= keys %XML_KEYS;
@@ -325,7 +316,7 @@ if( $PASS==0){
 ## Return SQL records or mysql error
 #################################################################
 sub SQL{ 
-use vars qw($LOGFILE);
+use vars qw($LOGFILE $dbh);
 my $SQL=qq[@_];
 my $now = localtime;
 #open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log') or die $! if $debug>=2;
@@ -1400,12 +1391,4 @@ print $new_sock &response('msisdn_allocation','OK',$Q{transactionid},$sql_result
 &response('LOGDB','msisdn_allocation',1,$Q{IMSI},'RSP',"$Q{MSISDN} $sql_result");	
 }#end sub msisdn_allocation
 #
-#&response('LOG','SOCKET',"CLOSE $new_sock ##################################################");
-#close $new_sock;
-#$new_sock->shutdown(2);
-################################################################
-}#new_sock
-}#while(1)
-}#until exit 
-######### END #################################################
-	
+######### END #################################################	
