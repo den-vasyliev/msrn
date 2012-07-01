@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 010712rev.32.0 INNER_SMS';
+my $REV='API Server 010712rev.32.2 INNER_SMS';
 ##
 #################################################################
 ## 
@@ -322,7 +322,7 @@ use vars qw($LOGFILE $dbh);
 my $SQL=qq[@_];
 my $now = localtime;
 #open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log') or die $! if $debug>=2;
-print $LOGFILE "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>3; #DONT CALL VIA &RESPONSE
+print $LOGFILE "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=3; #DONT CALL VIA &RESPONSE
 print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>3;
 #
 my ($rc, $sth);
@@ -887,6 +887,7 @@ switch ($code){
 			$msisdn=$sql_record[0];
 			$message=~s/_AMOUNT_/$options1/;
 			$message=~s/_CN_/$options/;
+			$message=uri_escape($message);
 		}#if message_code PMNT
 		if ($message_code=~/^mcc/){#USSD for MCC
 		my ($IN,$OUT,$SMS,$EX)=split(':',$options1);
@@ -896,12 +897,12 @@ switch ($code){
 				$message=~s/_SMS_/$SMS/;
 				$message=~s/_NO_/$EX/;
 				$msisdn='%2B'.$msisdn;
+				$message=uri_escape($message);
 			}#if message_code PMNT
-			if ($message_code=~/^inner_sms/{#SMS internal subscriber
-			$message=uri_escape($options);
+			if ($message_code=~/^inner_sms/){#SMS internal subscriber
+			$message=$options;
 			$msisdn='%2B'.$msisdn;
 			}#if message internal
-		$message=uri_escape($message);
 		$URL=qq[transaction_id=$transaction_id&smsto=$msisdn&smsfrom=ruimtools&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case sendsms MT
@@ -1261,6 +1262,7 @@ sub SMS{
 use vars qw(%Q);
 my ($ussd_subcode,$sms_id)=@_;
 my ($flag,$sms_opt,$sms_dest,$sms_text);
+our $sms_result;
 #
 &response('LOG','SMS-REQ',"$ussd_subcode");
 $ussd_subcode=~/(\d{2})\*(.+)/;
@@ -1297,15 +1299,16 @@ $sms_text=uri_escape($sms_text);
 my $sms_from=uri_unescape($Q{msisdn});
 $sms_from=~s/\+//;
 &response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
-&response('LOG','SMS-SEND-PARAM',"'SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from");
-&response('LOG','SMS-SEND-CMD',"SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from)");
-$SQL=qq[SELECT id from cc_card where phone='$sms_dest'];
+&response('LOG','SMS-SEND-PARAM',"$sms_dest,'ruimtools',$sms_text,$sms_from");
+$SQL=qq[SELECT id from cc_card where phone="$sms_dest"];
 my $SQL_inner_result=&SQL($SQL);
 if ($SQL_inner_result>0){#internal subscriber
-my $sms_result=&SENDGET('SIG_SendMT','','',$sms_dest,'inner_sms',"$sms_text");
+&response('LOG','SMS-REQ',"INTERNAL");
+$sms_result=&SENDGET('SIG_SendSMSMT','','',$sms_dest,'inner_sms',"$sms_text");
 }#if internal
 else{#external subscriber
-my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',"$sms_text",$sms_from);
+&response('LOG','SMS-REQ',"EXTERNAL");
+$sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',"$sms_text",$sms_from);
 }#else external
 $SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and flag like "%$num_page" and status=0];
 my $sql_update_result=&SQL($SQL);
