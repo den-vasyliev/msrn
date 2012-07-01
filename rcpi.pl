@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 270612rev.31.11 THREADS';
+my $REV='API Server 010712rev.32.0 INNER_SMS';
 ##
 #################################################################
 ## 
@@ -83,7 +83,7 @@ our $dbh = DBI->connect('DBI:mysql:msrn', 'msrn', 'msrn');
 # Multiplexing sockets handlers
 #################################################################
 #
-our $sock = new IO::Socket::INET (LocalHost => $HOST,LocalPort => $PORT,Proto => 'tcp',Listen => 10,ReuseAddr => 1,);
+our $sock = new IO::Socket::INET (LocalHost => $HOST,LocalPort => $PORT,Proto => 'tcp',Listen => 32,ReuseAddr => 1,);
 our $read_set = new IO::Select($sock); 
 our $new_sock;
 #
@@ -113,7 +113,9 @@ while(1) {#forever
 			}#else processing
 		}#foreach
 	#}#while ready
-} #while(1) 
+} #while(1)
+###############################################################
+#
 ########## MAIN #################################################
 ## Main procedure to control all functions
 #################################################################
@@ -777,7 +779,7 @@ switch ($ussd_code){
 			}#if number length 12 digits
 			else{ #if number length
 				&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'RSP',"Error: Incorrect number $2");
-				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Incorrect number $2. Please use format: +380 XX XXX XXXX");
+				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Incorrect number $2. Please use format: *127*+380 XX XXX XXXX#");
 				return 'USSD -1';
 			}#end else if number length
 	}#case 127
@@ -895,6 +897,10 @@ switch ($code){
 				$message=~s/_NO_/$EX/;
 				$msisdn='%2B'.$msisdn;
 			}#if message_code PMNT
+			if ($message_code=~/^inner_sms/{#SMS internal subscriber
+			$message=uri_escape($options);
+			$msisdn='%2B'.$msisdn;
+			}#if message internal
 		$message=uri_escape($message);
 		$URL=qq[transaction_id=$transaction_id&smsto=$msisdn&smsfrom=ruimtools&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
@@ -1293,7 +1299,14 @@ $sms_from=~s/\+//;
 &response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
 &response('LOG','SMS-SEND-PARAM',"'SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from");
 &response('LOG','SMS-SEND-CMD',"SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',$sms_text,$sms_from)");
+$SQL=qq[SELECT id from cc_card where phone='$sms_dest'];
+my $SQL_inner_result=&SQL($SQL);
+if ($SQL_inner_result>0){#internal subscriber
+my $sms_result=&SENDGET('SIG_SendMT','','',$sms_dest,'inner_sms',"$sms_text");
+}#if internal
+else{#external subscriber
 my $sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',"$sms_text",$sms_from);
+}#else external
 $SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and flag like "%$num_page" and status=0];
 my $sql_update_result=&SQL($SQL);
 return $sms_result;
