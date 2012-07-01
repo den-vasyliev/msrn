@@ -25,7 +25,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=SMSContent_CDR;sms_type=MO;ti
 # CFU seria == 2
 # Return msrn & session limit
 ###
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&imsi=234180000379608&code=1&sub_code=0&transactionid=100&reseller=RUIMTOOLS&auth_key=ba23dce5dc2fdec04b2a25e162a2a455&options=cleartext'
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&imsi=234180000379604&code=1&sub_code=0&transactionid=100&reseller=RUIMTOOLS&auth_key=ba23dce5dc2fdec04b2a25e162a2a455&options=cleartext'
 ### END AGENT CALL GRP
 #
 ### CMD Get Rate to Dest get_rate
@@ -118,3 +118,7 @@ curl -k 'https://127.0.0.1/a2billing/admin/Public/RateEngine.php?called=38044373
 ### SET DEBUG MODE
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=set_debug;sub_code=3'
 ### END SET DEBUG MODE
+#
+### LOAD AVERAGE
+perl -e 'use Time::HiRes qw(gettimeofday);($sS, $usecS) = gettimeofday();my $format = "%06d";$usecS=sprintf($format,$usecS);our $INNER_TIDS=$sS.$usecS;print "$INNER_TIDS\n";`curl -s "http://127.0.0.1/cgi-bin/api.pl?card_number=9671645[100-200]"`;($sE, $usecE) = gettimeofday();$usecE=sprintf($format,$usecE);our $INNER_TIDE=$sE.$usecE;print "$INNER_TIDE\n";($sT, $usecT) = gettimeofday();$usecT=sprintf($format,$usecT);$mcs=$sT.$usecT;$timer=int($mcs-$INNER_TIDS);print "Elapsed time:$timer mcs"'
+### END LOAD 
