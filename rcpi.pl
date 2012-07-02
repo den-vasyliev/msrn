@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 020712rev.33.2 HFX-407';
+my $REV='API Server 020712rev.33.3 HFX-407';
 ##
 #################################################################
 ## 
@@ -56,20 +56,19 @@ exec($SELF) or die "Couldn't restart: $!\n";
 ###############################################################
 #
 ########## DEBUG OPTIONS ######################################
+# 0 - off all logs
 # 1 - print INFO to LOG_FILE
 # 2 - print INFO&SQL to LOG_FILE
 # 3 - print INFO&DEBUG&SQL to STDOUT&LOG_FILE
-# 4 - print to STDOUT&LOG_FILE; print SQL queries
+# 4 - print to all STDOUT&LOG_FILE
 # *All transactions will always store in DB
+# **Default is 2
 #
-if(@ARGV){our $debug=$ARGV[0]}else{use vars qw($debug );$debug=3}
+if(@ARGV){our $debug=$ARGV[0]}else{use vars qw($debug );$debug=2}
 #################################################################
 #
 ########## LOG FILE #############################################
 our $LOGFILE = IO::File->new("/opt/ruimtools/log/rcpi.log", "a+");
-#my $ofh = select LOGFILE;
-#	$| = 1;
-#	select $ofh;
 #
 ########## CONFIGURATION FOR MAIN SOCKET ########################
 my $HOST='127.0.0.1';
@@ -323,8 +322,7 @@ sub SQL{
 use vars qw($LOGFILE $dbh);
 my $SQL=qq[@_];
 my $now = localtime;
-#open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log') or die $! if $debug>=2;
-print $LOGFILE "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=3; #DONT CALL VIA &RESPONSE
+print $LOGFILE "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>=2; #DONT CALL VIA &RESPONSE
 print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>3;
 #
 my ($rc, $sth);
