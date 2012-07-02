@@ -59,7 +59,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=ping'
 ### END CMD PING
 #
 ### SIG LU_CDR
-q
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000379608;mcc=412;mnc=40;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
 <?xml version="1.0" ?><CDR_response><cdr_id>59526930</cdr_id><cdr_status>1</cdr_status></CDR_response>
 #
 curl 'http://127.0.0.1:8008/roamingcenter/?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000079890;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'

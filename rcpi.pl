@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 020712rev.33.3 HFX-407';
+my $REV='API Server 020712rev.33.4';
 ##
 #################################################################
 ## 
