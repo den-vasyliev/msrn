@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 020712rev.33.4';
+my $REV='API Server 020712rev.33.5 HFX-576';
 ##
 #################################################################
 ## 
@@ -573,10 +573,10 @@ if ($LU>0){#if subscriber exist and active, 0 - if resale
 		$result=&resale('CB',"$IMSI","$resale","$2") if $resale ne '0';
 		return $result;
 	}elsif($ussd=$USSD=~/\*(\d{3}).?(.*)#/){#if USSD general
-		&response('LOG','MOC-SIG-USSD-REQUEST',"$1,$2,$IMSI,$sub_cid,$sub_balance") if $resale eq '0';
-		my $result=&USSD($1,$2,$IMSI,$sub_cid,$sub_balance) if $resale eq '0';
-		&response('LOG','MOC-SIG-USSD-REQUEST',"UD,$IMSI,$resale,$1,$2") if $resale ne '0';
-		$result=&resale('UD',"$IMSI","$resale","$1","$2") if $resale ne '0';
+		&response('LOG','MOC-SIG-USSD-REQUEST',"$1,$2,$IMSI,$sub_cid,$sub_balance") if (($resale eq '0')||($1 eq '122'));
+		my $result=&USSD($1,$2,$IMSI,$sub_cid,$sub_balance) if (($resale eq '0')||($1 eq '122'));
+		&response('LOG','MOC-SIG-USSD-REQUEST',"UD,$IMSI,$resale,$1,$2") if (($resale ne '0')&&($1 ne '122'));
+		$result=&resale('UD',"$IMSI","$resale","$1","$2") if (($resale ne '0')&&($1 ne '122'));
 		return $result;
 	}#elsif ussd
 	else{
