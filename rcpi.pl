@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 010712rev.32.2 INNER_SMS';
+my $REV='API Server 020712rev.33.2 HFX-407';
 ##
 #################################################################
 ## 
@@ -66,8 +66,10 @@ if(@ARGV){our $debug=$ARGV[0]}else{use vars qw($debug );$debug=3}
 #################################################################
 #
 ########## LOG FILE #############################################
-our $LOGFILE = new IO::File;
-$LOGFILE->open('>>/opt/ruimtools/log/rcpi.log');
+our $LOGFILE = IO::File->new("/opt/ruimtools/log/rcpi.log", "a+");
+#my $ofh = select LOGFILE;
+#	$| = 1;
+#	select $ofh;
 #
 ########## CONFIGURATION FOR MAIN SOCKET ########################
 my $HOST='127.0.0.1';
@@ -372,7 +374,7 @@ my $mcs=$s.$usec;
 $timer=int($mcs-$INNER_TID) if $INNER_TID;
 my $now = localtime;
 #
-#open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log');
+open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log');
 #
 my ($ACTION_TYPE,$RESPONSE_TYPE,$RONE,$RSEC,$RTHI,$RFOUR)=@_;
 if($ACTION_TYPE!~m/^LO/){
@@ -402,6 +404,7 @@ elsif($ACTION_TYPE eq 'LOG'){
 	my	$LOG="[$now]-[$timer]-[API-LOG-$RESPONSE_TYPE]: $RONE\n";
 	print $LOGFILE $LOG if (($debug<=4)&&($debug!=0));
 	print $LOG if $debug>=3;
+	$LOGFILE->flush();
 	}#ACTION TYPE LOG
 	elsif($ACTION_TYPE eq 'LOGDB'){
 		my $SQL=qq[INSERT INTO cc_transaction (`id`,`type`,`inner_tid`,`transaction_id`,`IMSI`,`status`,`info`,`timer`) values(NULL,"$RESPONSE_TYPE",$INNER_TID,"$RONE","$RSEC","$RTHI","$RFOUR",$timer)];
@@ -412,7 +415,6 @@ elsif($ACTION_TYPE eq 'LOG'){
 		print $LOGFILE $LOG if $debug<=4;
 		print $LOG if $debug>=3;
 	}#ACTION TYPE LOGDB
-#close LOGFILE;
 }########## END sub response ####################################
 #
 ########## LU_CDR ###############################################
