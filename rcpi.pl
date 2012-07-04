@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 040712rev.33.15 INNER_FUNC';
+my $REV='API Server 050712rev.34.4 INNER_FUNC';
 ##
 #################################################################
 ## 
@@ -653,7 +653,7 @@ if (($sub_active==1)and($sub_balance>=1)){#if status 1 and balance >1
 					my @sql_result=&SQL($SQL);
 					my $rate=substr($sql_result[0],0,6);
 					&response('LOG','MOC-SIG-GET-SPOOL',$sql_aff_rows);
-					print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please wait... Calling $dest. Rate $rate. Balance $sub_balance");
+					print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please wait... Calling $dest. Rate: \$ $rate. Balance: \$$sub_balance");
 					&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'SPOOL',"$uniqueid");
 					return 'SPOOL SUCCESS 0';
 				}else{
@@ -768,7 +768,7 @@ switch ($ussd_code){
 	case "124"{#balance request
 		&response('LOG','MOC-SIG-USSD-BALANCE-REQUEST',"$ussd_code");
 		&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Balance $sub_balance \$. Data balance $creditlimit \$");
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Balance: \$ $sub_balance. Data balance: \$ $creditlimit");
 		return 'USSD 0';
 	}#case 124
 ###
@@ -791,33 +791,52 @@ switch ($ussd_code){
 ###
 	case "127"{#CFU request
 		&response('LOG','MOC-SIG-USSD-CFU-REQUEST',"$ussd_code $ussd_subcode");
-		&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'REQ',"$ussd_code $ussd_subcode");
-			if ($ussd_subcode=~/(.?)(380\d{9})/){#if number length 12 digits
+		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'REQ',"$ussd_code $ussd_subcode");
+			if (($ussd_subcode)&&($ussd_subcode=~/(.?)(380\d{9})/)){#if number length 12 digits
 				my $SQL=qq[UPDATE cc_card set fax="$2" where useralias="$IMSI" or firstname="$IMSI"];
 				my $SQL_result=&SQL($SQL);
-				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please call **21*+380445945754# from $2 to activate. Call ##21# to deactivate") if $SQL_result==1;
-				&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode $SQL_result") if $SQL_result==1;
+				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please call **21*00380445945754# from $2 to activate. Call ##21# to deactivate") if $SQL_result==1;
+				&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode $SQL_result") if $SQL_result==1;
 				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Sorry, number $2 already in use.") if $SQL_result!=1;
-				&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'RSP',"Error: $2 already in use $SQL_result") if $SQL_result != 1;
+				&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'RSP',"Error: $2 already in use $SQL_result") if $SQL_result != 1;
 				return "USSD $SQL_result";
 			}#if number length 12 digits
-			else{ #if number length
-				&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'RSP',"Error: Incorrect number $2");
-				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Incorrect number $2. Please use format: *127*+380 XX XXX XXXX#");
+			elsif(!$ussd_subcode=~/(.?)(380\d{9})/){ #if number length
+				&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'RSP',"Error: Incorrect number $2");
+				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Incorrect number $2. Please use format: *127*380 XX XXX XXXX#");
 				return 'USSD -1';
 			}#end else if number length
+			else{#else just want instructions
+			&response('LOG','MOC-SIG-USSD-CFU-REQUEST',"Just info $ussd_code $ussd_subcode");
+			my $SQL=qq[SELECT fax from cc_card where useralias="$IMSI" or firstname="$IMSI"];
+				my @SQL_result=&SQL($SQL);
+				my $CFU=$SQL_result[0];
+				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Active for $CFU.To activate call *21*00380445945754# from $CFU. Call ##21# to deactivate") if $CFU>0;
+				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Not active. Please use format: *127*380 XX XXX XXXX# to setup") if $CFU<0;
+				&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode $CFU");
+				return 'USSD $#SQL_result';
+				}
 	}#case 127
 ###
-	case "128"{#balance request
-		&response('LOG','MOC-SIG-USSD-RATES-REQUEST',"$ussd_code");
-		&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please wait sms with rate list for your location");
-		return 'USSD 0';
+	case "128"{#country rates request
+		&response('LOG','MOC-SIG-COUNTRY-RATES-REQUEST',"$ussd_code");
+		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please wait sms with rate list for your location!");
+		my $SQL_result=&LU_H(1);
+		return 'USSD $SQL_result';
 	}#case 128
+	case "129"{#ussd codes request
+		&response('LOG','MOC-SIG-USSD-CODES-REQUEST',"$ussd_code");
+		&response('LOGDB','get_ussd_codes',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please wait sms with short codes list!");
+		my $SMSMT_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'get_ussd_codes');
+		return 'USSD $SMSMT_result';
+	}#case 129
+	
 ###
 	else{#switch ussd code
 		&response('LOG','MOC-SIG-USSD-UNKNOWN-REQUEST',"$ussd_code");
-		&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'ERROR',"$ussd_code");
+		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'ERROR',"$ussd_code");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"UNKNOWN USSD REQUEST");
 	return 'USSD -3';
 	}#end else switch ussd code (no code defined)
@@ -906,7 +925,7 @@ switch ($code){
 	#
 	case "SIG_SendSMSMT" {#send sms MT to sub
 		if ($message_code=~/^pmnt/){#USSD for PMNT
-			my $SQL=qq[SELECT CONCAT('%2B',phone) FROM cc_card where username="$options"];
+			my $SQL=qq[SELECT phone FROM cc_card where username="$options"];
 			my @sql_record=&SQL($SQL);
 			$msisdn=$sql_record[0];
 			$message=~s/_AMOUNT_/$options1/;
@@ -914,19 +933,24 @@ switch ($code){
 			$message=uri_escape($message);
 		}#if message_code PMNT
 		if ($message_code=~/^mcc/){#USSD for MCC
-		my ($IN,$OUT,$SMS,$EX)=split(':',$options1);
+		my ($voice_rate,$invoice_rate,$sms_rate,$data_rate,$extra_rate)=split(':',$options1);
 				$message=~s/_CN_/$options/;
-				$message=~s/_IN_/$IN/;
-				$message=~s/_OUT_/$OUT/;
-				$message=~s/_SMS_/$SMS/;
-				$message=~s/_NO_/$EX/;
-				$msisdn='%2B'.$msisdn;
+				$message=~s/_OUT_/$voice_rate/;
+				$message=~s/_IN_/$invoice_rate/;
+				$message=~s/_SMS_/$sms_rate/;
+				$message=~s/_DATA_/$data_rate/;
+				$message=$message."Extracharge $extra_rate" if ($extra_rate);
+				#$msisdn='%2B'.$msisdn;
 				$message=uri_escape($message);
 			}#if message_code PMNT
 			if ($message_code=~/^inner_sms/){#SMS internal subscriber
 			$message=$options;
-			$msisdn='%2B'.$msisdn;
+			#$msisdn='%2B'.$msisdn;
 			}#if message internal
+			$msisdn='%2B'.$msisdn;
+			if ($message_code=~/^get_ussd_codes/){#SMS with ussd codes
+			$message=uri_escape($message);
+			}#if ussd codes
 		$URL=qq[transaction_id=$transaction_id&smsto=$msisdn&smsfrom=ruimtools&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case sendsms MT
@@ -1049,7 +1073,7 @@ switch ($code){
 	case 'get_stat' {#GET STAT
 	my $SQL;
 		&response('LOG','RC-API-CMD',"GET_STAT");
-		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_STAT $code $sub_code");
+		&response('LOGDB',"$sub_code","$Q{transactionid}","$imsi",'OK',"GET_STAT $code $sub_code");
 		switch ($sub_code){#switch CMD
 			case 'get_card_number'{$SQL=qq[SELECT $sub_code($Q{card_number})]}
 			case 'get_rate'{$SQL=qq[SELECT round($sub_code($Q{msisdn},$Q{options}),2)]}
@@ -1058,7 +1082,6 @@ switch ($code){
 		}#switch CMD
 		my @sql_record=&SQL($SQL);
 		my $stat_result=$sql_record[0];
-		#$stat_result=substr($stat_result,0,6) if $sub_code eq 'get_rate';#Get Rate to Dest get_rate
 		#
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$stat_result");
 		&response('LOG','RC-API-CMD-STAT',"$stat_result");
@@ -1260,6 +1283,7 @@ return $SQL_T_result;
 ### sub LOCATION HISTORY ##
 sub LU_H{
 use vars qw(%Q);
+my $ussd_request=$_[0];
 my $SQL='';
 if (($Q{imsi})&&($Q{mnc})&&($Q{mcc})&&($Q{request_type})){#if signaling request
 $SQL=qq[UPDATE cc_card set country=(select countrycode from cc_country, cc_mnc where countryname=country and mcc="$Q{mcc}" limit 1), zipcode="$Q{mcc} $Q{mnc}", tag=(select mno from cc_mnc where mnc="$Q{mnc}" and mcc="$Q{mcc}") where (useralias="$Q{imsi}" or firstname="$Q{imsi}") and country!=(select countrycode from cc_country, cc_mnc where countryname=country and mcc="$Q{mcc}" limit 1)];
@@ -1267,12 +1291,13 @@ my @sql_result=&SQL($SQL);
 # SEND WELCOME SMS
 my $UPDATE_result=$sql_result[0];
 $UPDATE_result=0 if $sql_result[0] eq '0E0';
-if ($UPDATE_result eq '1'){#if subscriber change country
-$SQL=qq[SELECT countryname,rates from cc_country where countrycode=(select country from cc_card where useralias="$Q{imsi}" or firstname="$Q{imsi}")];
+if (($UPDATE_result eq '1')||($ussd_request==1)){#if subscriber change country or ussd request
+$SQL=qq[SELECT countryname,voice_rate,invoice_rate,sms_rate,data_rate,extra_rate from cc_mnc, cc_country where country=countryname and countrycode=(select country from cc_card where useralias="$Q{imsi}" or firstname="$Q{imsi}")];
 my @sql_result=&SQL($SQL);
-my $countryname=$sql_result[0];
-my $countryrate=$sql_result[1];
+my ($countryname,$voice_rate,$invoice_rate,$sms_rate,$data_rate,$extra_rate)=@sql_result;
+my $countryrate="$voice_rate:$invoice_rate:$sms_rate:$data_rate:$extra_rate";
 my $USSD_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'mcc_new',"$countryname","$countryrate");
+ $USSD_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'get_ussd_codes');
 }#if change country
 #
 return $sql_result[0]; 
