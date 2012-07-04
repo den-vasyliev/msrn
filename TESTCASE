@@ -99,8 +99,7 @@ curl "http://127.0.0.1/cgi-bin/api.pl?request_type=msisdn_allocation;cdr_id=4313
 ### END MSISDN allocation
 #
 ### DataAUTH
-curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000379607;MCC=255;MNC=
-003;TotalCurrentByteLimit=0;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000379607;ICCID=8923418972000000007"
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000379607;MCC=255;MNC=003;TotalCurrentByteLimit=0;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000379607;ICCID=8923418972000000007"
 ### END DataAUTH
 #
 ### SMS MT
@@ -122,3 +121,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=set_debug;sub
 ### LOAD AVERAGE
 perl -e 'use Time::HiRes qw(gettimeofday);($sS, $usecS) = gettimeofday();my $format = "%06d";$usecS=sprintf($format,$usecS);our $INNER_TIDS=$sS.$usecS;print "$INNER_TIDS\n";`curl -s "http://127.0.0.1/cgi-bin/api.pl?card_number=9671645[100-200]"`;($sE, $usecE) = gettimeofday();$usecE=sprintf($format,$usecE);our $INNER_TIDE=$sE.$usecE;print "$INNER_TIDE\n";($sT, $usecT) = gettimeofday();$usecT=sprintf($format,$usecT);$mcs=$sT.$usecT;$timer=int($mcs-$INNER_TIDS);print "Elapsed time:$timer mcs"'
 ### END LOAD 
+#
+### POSTDATA
+curl 'http://127.0.0.1/cgi-bin/api.pl?POSTDATA=%3Ccomplete-datasession-notification%20callid%3D%2268313515%22%3E%3Ccreatetime%3E2012-07-03T13%3A19%3A38%3C%2Fcreatetime%3E%3Creference%3EData%3C%2Freference%3E%3Ccalltype%20calltypeid%3D%2211%22%3Edata%3C%2Fcalltype%3E%3Cuserid%3E878385%3C%2Fuserid%3E%3Cusername%3E447700079964%3C%2Fusername%3E%3Ccustomerid%3E874855%3C%2Fcustomerid%3E%3Ccompanyname%3E972000000008%3C%2Fcompanyname%3E%3Ctotalcost%20amount%3D%220.0000%22%20currency%3D%22USD%22%3E0.0000%3C%2Ftotalcost%3E%3Cagenttotalcost%20amount%3D%220.1961%22%20currency%3D%22USD%22%3E0.1961%3C%2Fagenttotalcost%3E%3Cagentid%3E1024%3C%2Fagentid%3E%3Ccallleg%20calllegid%3D%22124387376%22%20calllegtype%3D%22data%22%3E%3Cnumber%3E447700079964%3C%2Fnumber%3E%3Cratedforuseras%3EZero%20Bill%20Customer%3C%2Fratedforuseras%3E%3Cdescription%3EZero%20Bill%20Customer%3C%2Fdescription%3E%3Cmcc%3E255%3C%2Fmcc%3E%3Cmnc%3E003%3C%2Fmnc%3E%3Cseconds%3E61%3C%2Fseconds%3E%3Cbytes%3E2148%3C%2Fbytes%3E%3Cpermegabyterate%20currency%3D%22USD%22%3E0.0000%3C%2Fpermegabyterate%3E%3Ccost%20amount%3D%220.0000%22%20currency%3D%22USD%22%3E0.0000%3C%2Fcost%3E%3Cagentpermegabyterate%20currency%3D%22USD%22%3E20.0836%3C%2Fagentpermegabyterate%3E%3Cagentcost%20amount%3D%220.1961%22%20currency%3D%22USD%22%3E0.1961%3C%2Fagentcost%3E%3C%2Fcallleg%3E%3C%2Fcomplete-datasession-notification%3E'
+### END POSTDATA

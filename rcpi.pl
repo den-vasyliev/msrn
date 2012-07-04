@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 020712rev.33.5 HFX-576';
+my $REV='API Server 030712rev.33.12 POSTDATA HFX-420';
 ##
 #################################################################
 ## 
@@ -97,8 +97,8 @@ while(1) {#forever
 				$read_set->add($new);
 				print "RUIMTOOLS-$REV\n";
 			}else {#processing 
-					while(our $PROXY_REQUEST=<$new_sock>){
-						if ($PROXY_REQUEST =~/897234jhdln328sLUV/){
+					while(our $XML_REQUEST=<$new_sock>){
+						if ($XML_REQUEST =~/897234jhdln328sLUV/){
 							our $INNER_TID;
 							my ($s, $usec) = gettimeofday();my $format = "%06d";$usec=sprintf($format,$usec);$INNER_TID=$s.$usec;
 							&response('LOG',"API-SOCKET-OPEN","##################################################");
@@ -121,10 +121,10 @@ while(1) {#forever
 ## Main procedure to control all functions
 #################################################################
 sub main{
-use vars qw($PROXY_REQUEST $INNER_TID $LOGFILE $new_sock);
+use vars qw($XML_REQUEST $INNER_TID $LOGFILE $new_sock);
 our $lwp = LWP::UserAgent->new;
-if ($PROXY_REQUEST ne 'EMPTY'){
-	our %XML_KEYS=&XML_PARSE($PROXY_REQUEST,'PROXY');
+if ($XML_REQUEST ne 'EMPTY'){
+	our %XML_KEYS=&XML_PARSE($XML_REQUEST,'SIG_GetXML');
 	my $qkeys= keys %XML_KEYS;
 	&response('LOG','MAIN-XML-PARSE-RETURN',$qkeys);
 		if ($qkeys){#if kyes>0
@@ -133,6 +133,7 @@ if ($PROXY_REQUEST ne 'EMPTY'){
 		$IN_SET=$IN_SET.":$XML_KEYS{code}:$XML_KEYS{sub_code}" if $XML_KEYS{code};
 		$IN_SET=$IN_SET."$XML_KEYS{ident}:$XML_KEYS{amount}" if $XML_KEYS{salt};
 		$IN_SET=$IN_SET."$XML_KEYS{TotalCurrentByteLimit}" if $XML_KEYS{SessionID};
+		$IN_SET=$IN_SET."$XML_KEYS{calllegid}:$XML_KEYS{bytes}:$XML_KEYS{seconds}:$XML_KEYS{mnc}:$XML_KEYS{mcc}:$XML_KEYS{amount}" if $XML_KEYS{calllegid};
 		$XML_KEYS{transactionid}=$XML_KEYS{SessionID} if $XML_KEYS{SessionID};
 		$XML_KEYS{imsi}=$XML_KEYS{GlobalIMSI} if $XML_KEYS{SessionID};
 		&response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'IN',$IN_SET);
@@ -168,7 +169,7 @@ if ($PROXY_REQUEST ne 'EMPTY'){
 	}#switch ACTION TYPE RESULT
 }#if keys
 else{#else if keys
-	&response('LOGDB',"UNKNOWN REQUEST",0,0,'IN',"$PROXY_REQUEST");
+	&response('LOGDB',"UNKNOWN REQUEST",0,0,'IN',"$XML_REQUEST");
 	&response('LOG','MAIN-XML-PARSE-KEYS',$qkeys);
 	print $new_sock &response('LU_CDR','ERROR','INCORRECT XML KEYS',0);
 }#else if keys
@@ -179,10 +180,10 @@ else{#else if keys
 }########## END sub main ########################################
 #
 ########## XML_PARSE ############################################
-## Function to parse XML data from proxy and msrn request/respond
+## Function to parse XML data
 ## Usage XML_PARSE(<XML>,<OPTION>)
 ## Accept pure xml on input
-## Return hash with key=value for PROXY request and MSRN 
+## Return hash with key=value for XML request and MSRN 
 #################################################################
 sub XML_PARSE{
 my $REQUEST_LINE=$_[0];
@@ -200,9 +201,9 @@ use vars qw($REQUEST $DUMPER);
 our $REMOTE_HOST=$REQUEST->{authentication}{host};
 #
 switch ($REQUEST_OPTION){
-	case 'PROXY' {
+	case 'SIG_GetXML' {
+		&response('LOG',"XML-PARSE-DUMPER","$DUMPER")if $debug>3;
 		if ($REQUEST->{query}){#if request in 'query' format
-			&response('LOG',"XML-PARSE-DUMPER","$DUMPER")if $debug>3;
 			our %Q=();
 			my @QUERY=split(' ',$REQUEST->{query});
 				foreach my $pair(@QUERY){
@@ -224,10 +225,33 @@ switch ($REQUEST_OPTION){
 				}#foreach xml_keys
 			return %Q;
 		}#elsif payments
+		elsif($REQUEST->{'complete-datasession-notification'}){#if request in 'postdata' format
+		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION",'POSTDATA');
+		our %Q=('request_type'=>'POSTDATA');
+		$Q{'transactionid'}=$REQUEST->{'complete-datasession-notification'}{callid};
+		my @KEYS= keys %{ $REQUEST->{'complete-datasession-notification'}{callleg} };
+		foreach my $xml_keys (@KEYS){#foreach keys
+				if ((ref($REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys}) eq 'HASH')&&($xml_keys eq 'agentcost')){#if HASH
+					my @SUBKEYS= keys %{ $REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys} } ;
+					foreach my $sub_xml_keys (@SUBKEYS){# foreach subkeys
+						&response('LOG',"XML-PARSE-RETURN-KEYS","$sub_xml_keys=$REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys}{$sub_xml_keys}")if $debug>3;
+						$Q{$sub_xml_keys}=$REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys}{$sub_xml_keys};
+					}#foreach sub xml_keys
+				}#if HASH
+					else{#else not HASH
+					&response('LOG',"XML-PARSE-RETURN-KEYS","$xml_keys=$REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys}")if $debug>3;
+					$Q{$xml_keys}=$REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys};
+							}#else not HASH
+					}#foreach xml_keys
+				my $SQL=qq[select useralias from cc_card where phone=$Q{'number'}];
+				my @sql_records=&SQL($SQL);
+				$Q{imsi}=$sql_records[0];
+			return %Q;
+		}#elsif postdata
 		else{#unknown format
 			&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION",'UNKNOWN FORMAT');
 		}#else unknown
-	}#proxy
+	}#xml
 	case 'SIG_GetMSRN' {
 		my $MSRN=$REQUEST->{MSRN_Response}{MSRN};
 		our $ERROR=$REQUEST->{Error_Message};
@@ -275,7 +299,7 @@ switch ($REQUEST_OPTION){
 ## Checks each parameter with database definition 
 ## Returns code of request type or 2 (no such type) or 3 (error)
 #################################################################
-sub GET_TYPE{
+	sub GET_TYPE{
 use vars qw(%Q);
 my $request_type=$_[0];
 my $SQL=qq[SELECT request FROM cc_actions where code="$request_type"];
@@ -406,7 +430,7 @@ elsif($ACTION_TYPE eq 'LOG'){
 	}#ACTION TYPE LOG
 	elsif($ACTION_TYPE eq 'LOGDB'){
 		my $SQL=qq[INSERT INTO cc_transaction (`id`,`type`,`inner_tid`,`transaction_id`,`IMSI`,`status`,`info`,`timer`) values(NULL,"$RESPONSE_TYPE",$INNER_TID,"$RONE","$RSEC","$RTHI","$RFOUR",$timer)];
-		&SQL($SQL) if $debug<=3;
+		&SQL($SQL) if $debug<=4;
 		my $LOG='';
 		$LOG="[$now]-[$timer]-[API-LOGDB]: $SQL\n" if $debug==4;
 		$LOG="[$now]-[$timer]-[API-LOGDB-TRANSACTION]: $RESPONSE_TYPE $RONE\n" if (($debug<=3)&&($debug!=0));
@@ -559,9 +583,9 @@ my $LU=&LU_CDR($IMSI,'CHECK_ONLY');
 &response('LOG','MOC-SIG-LU-SUB-CHECK',$LU);
 #
 if ($LU>0){#if subscriber exist and active, 0 - if resale
-	my $SQL=qq[SELECT id, status, credit, username, company_name, company_website, traffic_target from cc_card where useralias="$IMSI"];
+	my $SQL=qq[SELECT id, status, credit, username, company_name, company_website, traffic_target, creditlimit from cc_card where useralias="$IMSI"];
 	my @sql_record=&SQL($SQL);
-	my ($sub_id,$sub_active,$sub_balance,$sub_cid,$sub_peer,$sub_sim_site,$resale)=@sql_record;
+	my ($sub_id,$sub_active,$sub_balance,$sub_cid,$sub_peer,$sub_sim_site,$resale,$creditlimit)=@sql_record;
 	#
 	my $USSD=uri_unescape($Q{calldestination});
 	my $ussd=0;
@@ -573,8 +597,8 @@ if ($LU>0){#if subscriber exist and active, 0 - if resale
 		$result=&resale('CB',"$IMSI","$resale","$2") if $resale ne '0';
 		return $result;
 	}elsif($ussd=$USSD=~/\*(\d{3}).?(.*)#/){#if USSD general
-		&response('LOG','MOC-SIG-USSD-REQUEST',"$1,$2,$IMSI,$sub_cid,$sub_balance") if (($resale eq '0')||($1 eq '122'));
-		my $result=&USSD($1,$2,$IMSI,$sub_cid,$sub_balance) if (($resale eq '0')||($1 eq '122'));
+		&response('LOG','MOC-SIG-USSD-REQUEST',"$1,$2,$IMSI,$sub_cid,$sub_balance,$creditlimit") if (($resale eq '0')||($1 eq '122'));
+		my $result=&USSD($1,$2,$IMSI,$sub_cid,$sub_balance,$creditlimit) if (($resale eq '0')||($1 eq '122'));
 		&response('LOG','MOC-SIG-USSD-REQUEST',"UD,$IMSI,$resale,$1,$2") if (($resale ne '0')&&($1 ne '122'));
 		$result=&resale('UD',"$IMSI","$resale","$1","$2") if (($resale ne '0')&&($1 ne '122'));
 		return $result;
@@ -665,7 +689,7 @@ else{#else Status !=1 and Balance <1
 ##
 ###############################################
 sub USSD{
-my($ussd_code,$ussd_subcode,$IMSI,$sub_cid,$sub_balance)=@_;
+my($ussd_code,$ussd_subcode,$IMSI,$sub_cid,$sub_balance,$creditlimit)=@_;
 switch ($ussd_code){
 ###
 	case "000"{#SUPPORT request
@@ -744,7 +768,7 @@ switch ($ussd_code){
 	case "124"{#balance request
 		&response('LOG','MOC-SIG-USSD-BALANCE-REQUEST',"$ussd_code");
 		&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Balance $sub_balance");
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Balance $sub_balance \$. Data balance $creditlimit \$");
 		return 'USSD 0';
 	}#case 124
 ###
@@ -826,7 +850,7 @@ if ($sql_result[0]>=1){
 }else{return -1}#no voucher found
 }## END SUB VAUCHER #############################
 #
-########## CLOSE PROXY REQUEST #################################
+########## CLOSE XML REQUEST #################################
 #
 ########### SENDGET #############################################
 ## Process all types of requests
@@ -1391,10 +1415,27 @@ return $sql_result;
 #
 ### sub DataAUTH
 sub DataAUTH{
-print $new_sock &response('DataAUTH','OK',0);
-}# end sub DataAUTH
+use vars qw(%Q);
+my $SQL=qq[SELECT `SQL` from cc_actions where code='DataAUTH'];
+my @sql_result=&SQL($SQL);
+$SQL=$sql_result[0];
+$SQL=~s/_IMSI_/$Q{IMSI}/g;
+$SQL=~s/_MCC_/$Q{MCC}/;
+$SQL=~s/_MNC_/$Q{MNC}/;
+@sql_result=&SQL($SQL);
+my $data_auth=$sql_result[0];
+&response('LOG','DataAUTH',$data_auth);
+print $new_sock &response('DataAUTH','OK',$data_auth);
+}
+### END sub DataAUTH
 #
-###
+### sub POSTDATA
+sub POSTDATA{
+&response('LOG','POSTDATA',);
+print $new_sock "200";	
+} 
+### END sub POSTDATA
+#
 ### sub msisdn_allocation
 # First LU with UK number allocation
 ###
