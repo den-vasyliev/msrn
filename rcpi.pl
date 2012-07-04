@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 030712rev.33.12 POSTDATA HFX-420';
+my $REV='API Server 040712rev.33.15 INNER_FUNC';
 ##
 #################################################################
 ## 
@@ -1047,19 +1047,19 @@ switch ($code){
 		}#else
 	}#case 1
 	case 'get_stat' {#GET STAT
+	my $SQL;
 		&response('LOG','RC-API-CMD',"GET_STAT");
 		&response('LOGDB','CMD',"$Q{transactionid}","$imsi",'OK',"GET_STAT $code $sub_code");
-		my $SQL=qq[SELECT request from cc_actions where code="$sub_code"];
+		switch ($sub_code){#switch CMD
+			case 'get_card_number'{$SQL=qq[SELECT $sub_code($Q{card_number})]}
+			case 'get_rate'{$SQL=qq[SELECT round($sub_code($Q{msisdn},$Q{options}),2)]}
+			case 'get_agent_msrn'{$SQL=qq[SELECT $sub_code("$Q{options}","$Q{agent}")]}
+			else {$SQL=qq[SELECT -1]}
+		}#switch CMD
 		my @sql_record=&SQL($SQL);
-		$SQL="$sql_record[0]";
-		$SQL=~s/_FROMDEST_/$Q{msisdn}/ if $sub_code eq 'get_rate';#Get Rate to Dest get_rate
-		$SQL=~s/_TODEST_/$Q{options}/ if $sub_code eq 'get_rate';#Get Rate to Dest get_rate
-		$SQL=~s/_CARD_/$Q{card_number}/ if (($sub_code eq 'get_card_number')&&($Q{card_number}=~/^\d{10}$/));#Get CardNumber get_card_number
-		$SQL=~s/_RESELLER_/$Q{reseller}/ if $sub_code eq 'get_resale_msrn';#Get Resellers MSRN count get_resale_msrn
-		$SQL=~s/_TYPE_/$Q{options}/ if $sub_code eq 'get_resale_msrn';#Get Resellers MSRN count get_resale_msrn
-		@sql_record=&SQL($SQL);
 		my $stat_result=$sql_record[0];
-		$stat_result=substr($stat_result,0,6) if $sub_code eq 'get_rate';#Get Rate to Dest get_rate
+		#$stat_result=substr($stat_result,0,6) if $sub_code eq 'get_rate';#Get Rate to Dest get_rate
+		#
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$stat_result");
 		&response('LOG','RC-API-CMD-STAT',"$stat_result");
 		return 'CMD 2';
@@ -1285,66 +1285,72 @@ return $sql_result[0];
 sub SMS{
 use vars qw(%Q);
 my ($ussd_subcode,$sms_id)=@_;
-my ($flag,$sms_opt,$sms_dest,$sms_text);
+my ($flag,$sms_opt,$sms_dest,$sms_text,$SQL);
 our $sms_result;
 #
 &response('LOG','SMS-REQ',"$ussd_subcode");
 $ussd_subcode=~/(\d{2})\*(.+)/;
-$flag=$1;
-$sms_opt=$2;
+$flag=$1;$sms_opt=$2;
 $flag=~/(\d{1})(\d{1})/;
+#
 if ($1==1){#if first page
-$sms_opt=~/(\D?)(\d{10,})\*(\w+)/;
-$sms_dest=$2;
-$sms_text=$3;
-}else{#else next page
-$sms_dest="multipage";
-$sms_text=$sms_opt;
+		$sms_opt=~/(\D?)(\d{10,})\*(\w+)/;
+		$sms_dest=$2;
+		$sms_text=$3;
 }#if first page
-my $SQL=qq[SELECT request FROM cc_actions where code="get_sms_text"];
-my @sql_record=&SQL($SQL);
+else{#else next page
+		$sms_dest="multipage";
+		$sms_text=$sms_opt;
+}#else next page
+#
 &response('LOG','SMS-REQ',"$flag,$sms_dest");
 $SQL=qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`text`) values ("$sms_id","$Q{msisdn}","$sms_dest","$flag","$sms_text")];
 my $sql_result=&SQL($SQL);
 &response('LOG','SMS-REQ',"$sql_result");
-if ($sql_result>0){#if insert ok
-$flag=~/(\d{1})(\d{1})/;
-my $page=$1;
-my $num_page=$2;
-if ($num_page==$page){#if last multipage
-$SQL=qq[$sql_record[0]];
-$SQL=~s/_SRC_/$Q{msisdn}/g;
-$SQL=~s/_FLAG_/$num_page/g;
-my @sql_result=&SQL($SQL);
-$sms_text=$sql_result[0];
-$sms_dest=$sql_result[1];
-&response('LOG','SMS-ENC-RESULT',"$sms_text");
-$sms_text=uri_escape($sms_text);
-my $sms_from=uri_unescape($Q{msisdn});
-$sms_from=~s/\+//;
-&response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
-&response('LOG','SMS-SEND-PARAM',"$sms_dest,'ruimtools',$sms_text,$sms_from");
-$SQL=qq[SELECT id from cc_card where phone="$sms_dest"];
-my $SQL_inner_result=&SQL($SQL);
-if ($SQL_inner_result>0){#internal subscriber
-&response('LOG','SMS-REQ',"INTERNAL");
-$sms_result=&SENDGET('SIG_SendSMSMT','','',$sms_dest,'inner_sms',"$sms_text");
-}#if internal
-else{#external subscriber
-&response('LOG','SMS-REQ',"EXTERNAL");
-$sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',"$sms_text",$sms_from);
-}#else external
-$SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and flag like "%$num_page" and status=0];
-my $sql_update_result=&SQL($SQL);
-return $sms_result;
-}#if num_page==page
-else{#else multipage
-return 2;
-}#end else multipage
-	}#if insert
-	else{#else no insert
-return -1;
-	}#end else
+#if insert ok
+	if ($sql_result>0){#if insert ok
+		$flag=~/(\d{1})(\d{1})/;
+		my $page=$1;
+		my $num_page=$2;
+#if num page
+			if ($num_page==$page){#if num page
+				$SQL=qq[SELECT get_sms_text("$Q{msisdn}",$num_page)];
+				my @sql_result=&SQL($SQL);
+#if return content		
+				($sms_text,$sms_dest)=split('::',$sql_result[0]);
+				if (($sms_text) and ($sms_dest)){#if return content
+				&response('LOG','SMS-ENC-RESULT',"$sms_text");
+				$sms_text=uri_escape($sms_text);
+				my $sms_from=uri_unescape($Q{msisdn});
+				$sms_from=~s/\+//;
+				&response('LOG','SMS-TEXT-ENC-RESULT',"$#sql_result");
+					&response('LOG','SMS-SEND-PARAM',"$sms_dest,'ruimtools',$sms_text,$sms_from");
+					$SQL=qq[SELECT id from cc_card where phone="$sms_dest"];
+					my $SQL_inner_result=&SQL($SQL);
+#internal subscriber
+						if ($SQL_inner_result>0){#internal subscriber
+							&response('LOG','SMS-REQ',"INTERNAL");
+							$sms_result=&SENDGET('SIG_SendSMSMT','','',$sms_dest,'inner_sms',"$sms_text");
+						}#if internal
+						else{#external subscriber
+							&response('LOG','SMS-REQ',"EXTERNAL");
+							$sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',"$sms_text",$sms_from);
+						}#else external
+					$SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and flag like "%$num_page" and status=0];
+					my $sql_update_result=&SQL($SQL);
+					return $sms_result;
+#if return content		
+				}#if return content
+					return $#sql_result;
+				}#if num_page==page
+				else{#else multipage
+					return 2;
+					}#end else multipage
+					}#if insert
+				else{#else no insert
+						return -1;
+					}#end else
+	
 }# END sub USSD_SMS
 #
 ### sub MO_SMS
@@ -1416,13 +1422,8 @@ return $sql_result;
 ### sub DataAUTH
 sub DataAUTH{
 use vars qw(%Q);
-my $SQL=qq[SELECT `SQL` from cc_actions where code='DataAUTH'];
+my $SQL=qq[SELECT data_auth("$Q{IMSI}","$Q{MCC}","$Q{MNC}")];
 my @sql_result=&SQL($SQL);
-$SQL=$sql_result[0];
-$SQL=~s/_IMSI_/$Q{IMSI}/g;
-$SQL=~s/_MCC_/$Q{MCC}/;
-$SQL=~s/_MNC_/$Q{MNC}/;
-@sql_result=&SQL($SQL);
 my $data_auth=$sql_result[0];
 &response('LOG','DataAUTH',$data_auth);
 print $new_sock &response('DataAUTH','OK',$data_auth);

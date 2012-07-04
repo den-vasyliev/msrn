@@ -28,17 +28,17 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=SMSContent_CDR;sms_type=MO;ti
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&imsi=234180000379604&code=1&sub_code=0&transactionid=100&reseller=RUIMTOOLS&auth_key=ba23dce5dc2fdec04b2a25e162a2a455&options=cleartext'
 ### END AGENT CALL GRP
 #
-### CMD Get Rate to Dest get_rate
+### DEPRECATED CMD Get Rate to Dest get_rate
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+38067;imsi=234180000379608;code=get_stat;sub_code=get_rate;transactionid=321'
 #<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>0.2158</display_message></API_response>
 ### END Get Rate to Dest 71
 #
-### CMD Get USSD for day get_ussd_day
+### DEPRECATED CMD Get USSD for day get_ussd_day
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+61;imsi=234180000379608;code=get_stat;sub_code=get_ussd_day;transactionid=321'
 #<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>35</display_message></API_response>
 ### END CMD Get USSD for day 69
 #
-### CMD Get LU for day get_lu_day
+### DEPRECATED CMD Get LU for day get_lu_day
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+61;imsi=234180000379608;code=get_stat;sub_code=get_lu_day;transactionid=321'
 #<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>1</display_message></API_response>
 ### END CMD Get LU for day 68
@@ -76,8 +76,8 @@ curl 'http://127.0.0.1:8008/roamingcenter/?calldestination=%2A100%23;timestamp=2
 curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A128%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379608;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088'
 ### END USSD Rates
 #
-### CMD Get Resellers MSRN count get_resale_msrn G
-curl "http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=0;imsi=0;code=get_stat;sub_code=get_resale_msrn;reseller=7354bff766a40f54d17f6e397cbbba76;options=G;transactionid=321"
+### CMD Get AGENT MSRN count get_resale_msrn G
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=0;imsi=0;code=get_stat;sub_code=get_agent_msrn;agent=7354bff766a40f54d17f6e397cbbba76;options=G;transactionid=321"
 #<?xml version="1.0" ?><API_response><transaction_id>321</transaction_id><display_message>164</display_message></API_response>
 ### END CMD Get Resellers MSRN count get_resale_msrn G
 #
@@ -99,7 +99,7 @@ curl "http://127.0.0.1/cgi-bin/api.pl?request_type=msisdn_allocation;cdr_id=4313
 ### END MSISDN allocation
 #
 ### DataAUTH
-curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000379607;MCC=255;MNC=003;TotalCurrentByteLimit=0;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000379607;ICCID=8923418972000000007"
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000379608;MCC=255;MNC=003;TotalCurrentByteLimit=0;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000379608;ICCID=8923418972000000007"
 ### END DataAUTH
 #
 ### SMS MT
