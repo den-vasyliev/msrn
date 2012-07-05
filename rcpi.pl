@@ -805,9 +805,9 @@ switch ($ussd_code){
 				my @SQL_result=&SQL($SQL);
 				my $CFU=$SQL_result[0];
 				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Active for $CFU.To activate call *21*00380445945754# from $CFU. Call ##21# to deactivate") if $CFU>0;
-				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Not active. Please use format: *127*380 XX XXX XXXX# to setup") if $CFU<0;
+				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Not active. Please use format: *127*380 XX XXX XXXX# to setup") if $CFU<=0;
 				&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode $CFU");
-				return 'USSD $#SQL_result';
+				return "USSD $#SQL_result";
 				}
 	}#case 127
 ###
@@ -1070,7 +1070,7 @@ switch ($code){
 		switch ($sub_code){#switch CMD
 			case 'get_card_number'{$SQL=qq[SELECT $sub_code($Q{card_number})]}
 			case 'get_rate'{$SQL=qq[SELECT round($sub_code($Q{msisdn},$Q{options}),2)]}
-			case 'get_agent_msrn'{$SQL=qq[SELECT $sub_code("$Q{options}","$Q{agent}")]}
+			case 'get_agent_msrn'{$SQL=qq[SELECT $sub_code("$Q{options}","$Q{reseller}")]}
 			else {$SQL=qq[SELECT -1]}
 		}#switch CMD
 		my @sql_record=&SQL($SQL);
@@ -1289,7 +1289,7 @@ $SQL=qq[SELECT countryname,voice_rate,invoice_rate,sms_rate,data_rate,extra_rate
 my @sql_result=&SQL($SQL);
 my ($countryname,$voice_rate,$invoice_rate,$sms_rate,$data_rate,$extra_rate)=@sql_result;
 my $countryrate="$voice_rate:$invoice_rate:$sms_rate:$data_rate:$extra_rate";
-my $USSD_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'mcc_new',"$countryname","$countryrate");
+my $USSD_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'mcc_new',"$countryname","$countryrate") if $ussd_request!=1;
  $USSD_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'get_ussd_codes');
 }#if change country
 #
