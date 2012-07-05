@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 050712rev.34.4 INNER_FUNC';
+my $REV='API Server 050712rev.34.7';
 ##
 #################################################################
 ## 
@@ -645,13 +645,9 @@ if (($sub_active==1)and($sub_balance>=1)){#if status 1 and balance >1
 			my $SPOOL_RESULT=&AMI('call_spool',"$msrn:$dest:$sub_cid:$sub_peer");
 			#
 				if($SPOOL_RESULT==1){
-					my $SQL=qq[SELECT request from cc_actions where code="get_rate"];
-					my @sql_record=&SQL($SQL);
-					$SQL="$sql_record[0]";
-					$SQL=~s/_FROMDEST_/$msrn/;
-					$SQL=~s/_TODEST_/$dest/;
+					my $SQL=qq[SELECT round(get_rate($msrn,$dest),2)];
 					my @sql_result=&SQL($SQL);
-					my $rate=substr($sql_result[0],0,6);
+					my $rate=$sql_result[0];
 					&response('LOG','MOC-SIG-GET-SPOOL',$sql_aff_rows);
 					print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please wait... Calling $dest. Rate: \$ $rate. Balance: \$$sub_balance");
 					&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'SPOOL',"$uniqueid");
@@ -776,16 +772,13 @@ switch ($ussd_code){
 		&response('LOG','MOC-SIG-USSD-RATES',"$ussd_code $ussd_subcode");
 		&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode");
 		my $msrn=&SENDGET('SIG_GetMSRN',"$IMSI",'','','',"$ussd_code");
-		my $SQL=qq[SELECT request from cc_actions where code='get_rate'];
-		my @sql_record=&SQL($SQL);
-		$SQL="$sql_record[0]";
 		$ussd_subcode=~/(.?)(\d{12})/;
-		$SQL=~s/_FROMDEST_/$2/;
-		$SQL=~s/_TODEST_/$msrn/;
+		my $dest=$2;
+		my $SQL=qq[SELECT round(get_rate($msrn,$dest),2)];
 		my @sql_result=&SQL($SQL);
-		my $rate=substr($sql_result[0],0,6);
+		my $rate=$sql_result[0];
 		&response('LOG','MOC-SIG-USSD-RATES-RETURN',"$rate");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Rate from $msrn to $ussd_subcode is $rate");
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Rate to $ussd_subcode is \$ $rate");
 		return "USSD 0";
 	}#case 126
 ###
@@ -796,13 +789,13 @@ switch ($ussd_code){
 				my $SQL=qq[UPDATE cc_card set fax="$2" where useralias="$IMSI" or firstname="$IMSI"];
 				my $SQL_result=&SQL($SQL);
 				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please call **21*00380445945754# from $2 to activate. Call ##21# to deactivate") if $SQL_result==1;
-				&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode $SQL_result") if $SQL_result==1;
+				&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code $ussd_subcode $SQL_result") if $SQL_result==1;
 				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Sorry, number $2 already in use.") if $SQL_result!=1;
-				&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'RSP',"Error: $2 already in use $SQL_result") if $SQL_result != 1;
+				&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'RSP',"Error: $2 already in use $SQL_result") if $SQL_result != 1;
 				return "USSD $SQL_result";
 			}#if number length 12 digits
 			elsif(!$ussd_subcode=~/(.?)(380\d{9})/){ #if number length
-				&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'RSP',"Error: Incorrect number $2");
+				&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'RSP',"Error: Incorrect number $2");
 				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Incorrect number $2. Please use format: *127*380 XX XXX XXXX#");
 				return 'USSD -1';
 			}#end else if number length
@@ -820,14 +813,14 @@ switch ($ussd_code){
 ###
 	case "128"{#country rates request
 		&response('LOG','MOC-SIG-COUNTRY-RATES-REQUEST',"$ussd_code");
-		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
+		&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please wait sms with rate list for your location!");
 		my $SQL_result=&LU_H(1);
 		return 'USSD $SQL_result';
 	}#case 128
 	case "129"{#ussd codes request
 		&response('LOG','MOC-SIG-USSD-CODES-REQUEST',"$ussd_code");
-		&response('LOGDB','get_ussd_codes',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
+		&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please wait sms with short codes list!");
 		my $SMSMT_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'get_ussd_codes');
 		return 'USSD $SMSMT_result';
@@ -836,7 +829,7 @@ switch ($ussd_code){
 ###
 	else{#switch ussd code
 		&response('LOG','MOC-SIG-USSD-UNKNOWN-REQUEST',"$ussd_code");
-		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'ERROR',"$ussd_code");
+		&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'ERROR',"$ussd_code");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"UNKNOWN USSD REQUEST");
 	return 'USSD -3';
 	}#end else switch ussd code (no code defined)
