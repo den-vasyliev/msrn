@@ -6,11 +6,11 @@
 ####################################################
 #
 ### SIG CALLBACK
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A112%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379608;transactionid=164354;carrierid=;request_type=auth_callback_sig;mcc=280;mnc=01;msisdn=%2B447700055360;tadig=CYPCT;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379608;iccid=89234189720000000005'
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A112%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379605;transactionid=164354;carrierid=;request_type=auth_callback_sig;mcc=280;mnc=01;msisdn=%2B447700055360;tadig=CYPCT;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379608;iccid=89234189720000000005'
 ### END SIG CALLBACK
 #
 ### SMS-MP
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A11%2A380674014759%2A00480065006C006C006F0020007400680069007300200069007300200074%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379608;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=120786'
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A11%2A380674014759%2A00480065006C006C006F0020007400680069007300200069007300200074%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379608;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=120791'
 #
 curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A22%2A0065007300740020006D0075006C00740069002000700061006700650020006D0065007300730061%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379608;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=120762'
 ### END SMS-MP
@@ -59,7 +59,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=ping'
 ### END CMD PING
 #
 ### SIG LU_CDR
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000379608;mcc=412;mnc=40;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000379605;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
 <?xml version="1.0" ?><CDR_response><cdr_id>59526930</cdr_id><cdr_status>1</cdr_status></CDR_response>
 #
 curl 'http://127.0.0.1:8008/roamingcenter/?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000079890;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
@@ -99,7 +99,7 @@ curl "http://127.0.0.1/cgi-bin/api.pl?request_type=msisdn_allocation;cdr_id=4313
 ### END MSISDN allocation
 #
 ### DataAUTH
-curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000379608;MCC=255;MNC=003;TotalCurrentByteLimit=0;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000379608;ICCID=8923418972000000007"
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000379607;MCC=255;MNC=003;TotalCurrentByteLimit=0;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000379608;ICCID=8923418972000000007"
 ### END DataAUTH
 #
 ### SMS MT
@@ -125,3 +125,13 @@ perl -e 'use Time::HiRes qw(gettimeofday);($sS, $usecS) = gettimeofday();my $for
 ### POSTDATA
 curl 'http://127.0.0.1/cgi-bin/api.pl?POSTDATA=%3Ccomplete-datasession-notification%20callid%3D%2268313515%22%3E%3Ccreatetime%3E2012-07-03T13%3A19%3A38%3C%2Fcreatetime%3E%3Creference%3EData%3C%2Freference%3E%3Ccalltype%20calltypeid%3D%2211%22%3Edata%3C%2Fcalltype%3E%3Cuserid%3E878385%3C%2Fuserid%3E%3Cusername%3E447700079964%3C%2Fusername%3E%3Ccustomerid%3E874855%3C%2Fcustomerid%3E%3Ccompanyname%3E972000000008%3C%2Fcompanyname%3E%3Ctotalcost%20amount%3D%220.0000%22%20currency%3D%22USD%22%3E0.0000%3C%2Ftotalcost%3E%3Cagenttotalcost%20amount%3D%220.1961%22%20currency%3D%22USD%22%3E0.1961%3C%2Fagenttotalcost%3E%3Cagentid%3E1024%3C%2Fagentid%3E%3Ccallleg%20calllegid%3D%22124387376%22%20calllegtype%3D%22data%22%3E%3Cnumber%3E447700079964%3C%2Fnumber%3E%3Cratedforuseras%3EZero%20Bill%20Customer%3C%2Fratedforuseras%3E%3Cdescription%3EZero%20Bill%20Customer%3C%2Fdescription%3E%3Cmcc%3E255%3C%2Fmcc%3E%3Cmnc%3E003%3C%2Fmnc%3E%3Cseconds%3E61%3C%2Fseconds%3E%3Cbytes%3E2148%3C%2Fbytes%3E%3Cpermegabyterate%20currency%3D%22USD%22%3E0.0000%3C%2Fpermegabyterate%3E%3Ccost%20amount%3D%220.0000%22%20currency%3D%22USD%22%3E0.0000%3C%2Fcost%3E%3Cagentpermegabyterate%20currency%3D%22USD%22%3E20.0836%3C%2Fagentpermegabyterate%3E%3Cagentcost%20amount%3D%220.1961%22%20currency%3D%22USD%22%3E0.1961%3C%2Fagentcost%3E%3C%2Fcallleg%3E%3C%2Fcomplete-datasession-notification%3E'
 ### END POSTDATA
+#
+### USSD CFU
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379605;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088' 
+#<?xml version="1.0" ?><MOC_response><transaction_id>184863</transaction_id><display_message>Unknown USSD request</display_message></MOC_response>
+### END USSD CFU
+#
+### GET RATE TO DEST 126
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+38067;imsi=234180000379607;code=get_stat;sub_code=get_rate;transactionid=321'
+### END GET RATE TO DEST
+#EOF
