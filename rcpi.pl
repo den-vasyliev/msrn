@@ -922,7 +922,7 @@ switch ($code){
 			$URL=${SQL(qq[SELECT get_uri(NULL,NULL,NULL,$msisdn,"$message_code",NULL,'ruimtools',"$option1")],2)}[0];
 		}#if message internal
 		if ($message_code=~/^get_ussd_codes/){#SMS with ussd codes
-			$URL=${SQL(qq[SELECT get_uri(NULL,"$message_code",NULL,$msisdn,'ruimtools',NULL)],2)}[0];
+			$URL=${SQL(qq[SELECT get_uri(NULL,NULL,NULL,"$msisdn","$message_code",'ruimtools',NULL)],2)}[0];
 		}#if get ussd codes
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case SIG_SendSMSMT

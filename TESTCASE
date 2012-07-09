@@ -6,7 +6,7 @@
 ####################################################
 #
 ### SIG CALLBACK
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A112%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379605;transactionid=164354;carrierid=;request_type=auth_callback_sig;mcc=280;mnc=01;msisdn=%2B447700055360;tadig=CYPCT;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379608;iccid=89234189720000000005'
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A112%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379604;transactionid=164354;carrierid=;request_type=auth_callback_sig;mcc=280;mnc=01;msisdn=%2B447700055360;tadig=CYPCT;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379608;iccid=89234189720000000005'
 ### END SIG CALLBACK
 #
 ### SMS-MP
