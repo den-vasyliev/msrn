@@ -937,7 +937,7 @@ switch ($code){
 		#'SIG_SendResale',$imsi,$host,'','SIG_SendResale_CB',$options,NULL
 		#234180000379605,https://217.20.166.94:3801/roaming.asp?,,SIG_SendResale_CB,380674014759,
 		#234180000379605,"SIG_SendResale_CB",https://217.20.166.94:3801/roaming.asp?,234180000379605,380674014759,
-		$URL=${SQL(qq[SELECT get_uri("$code",$imsi,$dest,NULL,"$message_code",$option1,$option2)],2)}[0];
+		$URL=${SQL(qq[SELECT get_uri("$code",$imsi,"$dest",NULL,"$message_code",$option1,$option2)],2)}[0];
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case sendresale
 #####
@@ -1095,7 +1095,7 @@ if (($auth_key)&&($cgi)){
 		if($req_type=~/LU|CB|UD/){
 		&response('LOG','RESALE-REQUEST-TYPE',"$req_type $imsi,$cgi,$option1 $option2");
 		&response('LOGDB',"SIG_SendResale_$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'REQ',"RESALE $resale");
-		$SENDGET_result=&SENDGET('SIG_SendResale',$imsi,$cgi,NULL,"SIG_SendResale_$req_type",$option1,$option2);
+		$SENDGET_result=&SENDGET('SIG_SendResale',$imsi,"$cgi",NULL,"SIG_SendResale_$req_type",$option1,$option2);
 		&bill_resale($resale,"SIG_SendResale_$req_type");#Bill Reseller
 		&response('LOGDB',"SIG_SendResale_$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'RSP',"RESALE $SENDGET_result");
 	#	return $SENDGET_result;# OK or <error code>
