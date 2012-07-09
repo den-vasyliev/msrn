@@ -915,7 +915,6 @@ switch ($code){
 			$URL=${SQL(qq[SELECT get_uri("$code",NULL,NULL,NULL,"$message_code","$option1","$option2")],2)}[0];
 		}#if message_code PMNT
 		if ($message_code=~/^mcc/){#USSD for MCC
-			#select get_uri(234180000379609,'mcc_new',NULL,'44770091712','ruimtools');
 			$URL=${SQL(qq[SELECT get_uri("$code",$imsi,NULL,"$msisdn","$message_code",NULL,NULL)],2)}[0];		
 		}#if message_code MCC
 		if ($message_code=~/^inner_sms/){#SMS internal subscriber
@@ -928,15 +927,11 @@ switch ($code){
 	}#case SIG_SendSMSMT
 #####
 	case "SIG_SendSMS" {#send sms MO to any MSISDN
-		$URL=${SQL(qq[SELECT get_uri("$code",NULL,$dest,$msisdn,NULL,"$option1","$option2")],2)}[0];
+		$URL=${SQL(qq[SELECT get_uri("$code",NULL,"$dest","$msisdn",NULL,"$option1","$option2")],2)}[0];
 		$imsi=$Q{'imsi'};#for cc_transaction usage
 	}#case SIG_SendSMS
 #####
 	case "SIG_SendResale" {
-		#&response('LOG',"$code-PARAM_GET","$query,$host,$msisdn,$message_code,$options,$options1");
-		#'SIG_SendResale',$imsi,$host,'','SIG_SendResale_CB',$options,NULL
-		#234180000379605,https://217.20.166.94:3801/roaming.asp?,,SIG_SendResale_CB,380674014759,
-		#234180000379605,"SIG_SendResale_CB",https://217.20.166.94:3801/roaming.asp?,234180000379605,380674014759,
 		$URL=${SQL(qq[SELECT get_uri("$code",$imsi,"$dest",NULL,"$message_code",$option1,$option2)],2)}[0];
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case sendresale
@@ -1105,29 +1100,13 @@ if (($auth_key)&&($cgi)){
 		}
 switch ($req_type){
 	case 'LU'{#LU_CDR request
-	#	&response('LOG','RESALE-REQUEST-TYPE',"$req_type $imsi,$cgi,,LU,$option1");
-	#	&response('LOGDB',"SIG_SendResale_$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'REQ',"RESALE $resale");
-	#	my $SENDGET_result=&SENDGET('SIG_SendResale',$imsi,$cgi,NULL,"SIG_SendResale_$req_type",$option1,$option2);
-	#	&bill_resale($resale,"SIG_SendResale_$req_type");#Send LU to Resaler
-	#	&response('LOGDB',"SIG_SendResale_$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'RSP',"RESALE $SENDGET_result");
-		return $SENDGET_result;# OK or <error code>
+			return $SENDGET_result;# OK or <error code>
 	}#case LU
 	case 'CB'{#CallBack request
-	#	&response('LOG','RESALE-REQUEST-TYPE',"$req_type $imsi,$cgi,,CB,$option1");
-	#	&response('LOGDB',"SIG_SendResale_$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'REQ',"RESALE $resale");
-	#	my $SENDGET_result=&SENDGET('SIG_SendResale',$imsi,$cgi,NULL,"SIG_SendResale_$req_type",$option1,NULL);
-	#	&bill_resale($resale,"SIG_SendResale_$req_type");#Send CB to Resaler
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$SENDGET_result");
-	#	&response('LOGDB',"SIG_SendResale_$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'RSP',"RESALE $SENDGET_result");
 		return $SENDGET_result;# OK or <error code>
 	}#case CB
 	case 'UD'{#USSD reuqest
-	#	&response('LOG','RESALE-REQUEST-TYPE',"$req_type $imsi,$cgi,,UD,$options,$option2");
-	#	&response('LOGDB',"SIG_SendResale_$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'REQ',"RESALE $resale");
-	#	#$code,$query,$host,$msisdn,$message_code,$options,$options1
-	#	my $SENDGET_result=&SENDGET('SIG_SendResale',$imsi,$cgi,NULL,"SIG_SendResale_$req_type",$option1,$option2);
-	#	&bill_resale($resale,'SIG_SendResale_UD');#Send USSD to Resaler
-	#	&response('LOGDB',"SIG_SendResale_$req_type","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'RSP',"RESALE $SENDGET_result");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$SENDGET_result");
 		return $SENDGET_result;# OK or <error code>
 	}#case USSD
