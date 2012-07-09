@@ -59,7 +59,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=ping'
 ### END CMD PING
 #
 ### SIG LU_CDR
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000379605;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000379605;mcc=240;mnc=007;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
 <?xml version="1.0" ?><CDR_response><cdr_id>59526930</cdr_id><cdr_status>1</cdr_status></CDR_response>
 #
 curl 'http://127.0.0.1:8008/roamingcenter/?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000079890;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
@@ -134,4 +134,12 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-0
 ### GET RATE TO DEST 126
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+38067;imsi=234180000379607;code=get_stat;sub_code=get_rate;transactionid=321'
 ### END GET RATE TO DEST
+#
+### GET SESSION TIME TO DEST FROM CN (!) with out out code
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=380674014759;imsi=234180000379607;code=get_session_time;transactionid=321'
+### END GET SESSION TIME TO DEST FROM CN
+#
+### GET RESELLER MSRN
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=get_msrn;reseller=NK;auth_key=c351778448b570ed1b8849008a8f7fe6'
+### END RESELLER MSRN
 #EOF
