@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 080712rev.36.10 CFU';
+my $REV='API Server 090712rev.37.3 OPTIMAL';
 ##
 #################################################################
 ## 
@@ -479,8 +479,6 @@ if (($sub_id>0)&&(!$CHECK_ONLY)){#if found subscriber
 			&response('LOGDB','LU_CDR',"$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'OK',"ACTIVATED $XML_KEYS{cdr_id}");
 			&response('LOG','LU-CDR-SET-ACTIVE',"$sub_id") if $sql_result>0;
 			&response('LOG','LU-CDR',"UPDATED $sql_aff_rows rows") if $sql_result>0;
-			#SEND WELCOME MESSAGE WITH BALANCE
-			## my $USSD_result=&SENDGET('SIG_SendUSSD','',$host,$Q{msisdn},'welcome');
 			print $new_sock &response('LU_CDR','OK',"$XML_KEYS{cdr_id}",'1') if (!$CHECK_ONLY) and ($sql_result>0);
 			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.'  CANT SET ACTIVE') if $sql_result<0;
 			my $resale_result=&resale('LU',"$IMSI","$resale","$XML_KEYS{mcc}","$XML_KEYS{mnc}") if $resale ne '0';
@@ -887,108 +885,67 @@ if ($sql_result[0]>=1){
 sub SENDGET{
 use vars qw($lwp);
 #
-my $URL='';
-my $msrn=0;
 my $time=timelocal(localtime());
 our $transaction_id=$time.int(rand(1000));
+#
+my $URL='';
 my ($code,$query,$host,$msisdn,$message_code,$options,$options1)=@_;
-$message_code='EMPTY' if !$message_code;
-#
-$host='https://api2.globalsimsupport.com/WebAPI/C9API.aspx?' if !$host;
-#
-my $SQL=qq[SELECT request, from_unixtime($time),response FROM cc_actions where code="$code" or code="$message_code"];#or used for USSD msg
-my @sql_record=&SQL($SQL);
-#
-my $URL_QUERY=$sql_record[0];
-my $timestamp=uri_escape($sql_record[1]);
-my $message=$sql_record[2];
 #
 switch ($code){
-	case "SIG_GetTIME" {#get max time for call
-		$URL_QUERY=~s/_DEST_/$msisdn/;
-		$URL_QUERY=~s/_SUBID_/$query/;
-		$URL=$URL_QUERY;
+#####	
+	case "SIG_GetTIME" {#get max session timeout
+		$URL=${SQL(qq[select get_message($query,'SIG_GetTIME',$msisdn,NULL,NULL,NULL)],2)}[0];
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 		$query=$Q{'imsi'};#for cc_transaction usage
 	}#case gettime
+#####
 	case "SIG_GetMSRN" {# get msrn
-	#reserved for future	$msrn=&reuse_msrn($query) if $options eq '126';#code 126 checks is not safety for changes
-	#reserved for future	&response('LOG',"$code-REUSE-GET","$msrn");
-		$URL=qq[transaction_id=$transaction_id&query=$query&$URL_QUERY&timestamp=$timestamp] if $msrn==0;
+		$URL=${SQL(qq[SELECT get_message($query,'SIG_GetMSRN',NULL,NULL,NULL,NULL)],2)}[0];
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case getmsrn
-	#
+#####
 	case "SIG_SendUSSD" {#send ussd
-			if ($message_code=~/^pmnt/){#USSD for PMNT
-				my $SQL=qq[SELECT CONCAT('%2B',phone) FROM cc_card where username="$options"];
-				my @sql_record=&SQL($SQL);
-				$msisdn=$sql_record[0];
-				$message=~s/_AMOUNT_/$options1/;
-				$message=~s/_CN_/$options/;
-			}#if message_code PMNT
-			$message=uri_escape($message);
-		$URL=qq[transaction_id=$transaction_id&ussdto=$msisdn&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
+		$URL=${SQL(qq[SELECT get_message(NULL,'SIG_SendUSSD_FT',NULL,$msisdn,NULL,$options)],2)}[0];
+		$URL=uri_escape($URL);
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case sendussd
-	#
+#####
 	case "SIG_SendSMSMT" {#send sms MT to sub
-		if ($message_code=~/^pmnt/){#USSD for PMNT
-			my $SQL=qq[SELECT phone FROM cc_card where username="$options"];
-			my @sql_record=&SQL($SQL);
-			$msisdn=$sql_record[0];
-			$message=~s/_AMOUNT_/$options1/;
-			$message=~s/_CN_/$options/;
-			$message=uri_escape($message);
+		if ($message_code=~/^pmnt/){#SMS for PMNT
+			$URL=${SQL(qq[SELECT get_message($options,"$message_code",$options1,NULL,'ruimtools',NULL)],2)}[0];
 		}#if message_code PMNT
 		if ($message_code=~/^mcc/){#USSD for MCC
-		my ($voice_rate,$invoice_rate,$sms_rate,$data_rate,$extra_rate)=split(':',$options1);
-				$message=~s/_CN_/$options/;
-				$message=~s/_OUT_/$voice_rate/;
-				$message=~s/_IN_/$invoice_rate/;
-				$message=~s/_SMS_/$sms_rate/;
-				$message=~s/_DATA_/$data_rate/;
-				$message=$message."Extracharge $extra_rate" if ($extra_rate);
-				#$msisdn='%2B'.$msisdn;
-				$message=uri_escape($message);
-			}#if message_code PMNT
-			if ($message_code=~/^inner_sms/){#SMS internal subscriber
-			$message=$options;
-			#$msisdn='%2B'.$msisdn;
-			}#if message internal
-			$msisdn='%2B'.$msisdn;
-			if ($message_code=~/^get_ussd_codes/){#SMS with ussd codes
-			$message=uri_escape($message);
-			}#if ussd codes
-		$URL=qq[transaction_id=$transaction_id&smsto=$msisdn&smsfrom=ruimtools&$URL_QUERY&message=$message&timestamp=$timestamp] if $message_code;
+			#select get_message(234180000379609,'mcc_new',NULL,'44770091712','ruimtools');
+			$URL=${SQL(qq[SELECT get_message($options,"$message_code",NULL,$msisdn,'ruimtools',NULL)],2)}[0];		
+		}#if message_code MCC
+		if ($message_code=~/^inner_sms/){#SMS internal subscriber
+			$URL=${SQL(qq[SELECT get_message(NULL,"$message_code",NULL,$msisdn,'ruimtools',"$options")],2)}[0];
+		}#if message internal
+		if ($message_code=~/^get_ussd_codes/){#SMS with ussd codes
+			$URL=${SQL(qq[SELECT get_message(NULL,"$message_code",NULL,$msisdn,'ruimtools',NULL)],2)}[0];
+		}#if get ussd codes
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
-	}#case sendsms MT
-	#
+	}#case SIG_SendSMSMT
+#####
 	case "SIG_SendSMS" {#send sms MO to any MSISDN
-		$URL=qq[transaction_id=$transaction_id&smsto=%2B$query&smsfrom=ruimtools&$URL_QUERY&msisdn=$options1&message=$options&timestamp=$timestamp];
+		$URL=${SQL(qq[SELECT get_message(NULL,"$code",$options1,$query,'ruimtools',"$options")],2)}[0];
 		$query=$Q{'imsi'};#for cc_transaction usage
-	}#case sendsms MO
+	}#case SIG_SendSMS
+#####
 	case "SIG_SendResale" {
 		&response('LOG',"$code-PARAM_GET","$query,$host,$msisdn,$message_code,$options,$options1");
-		$URL_QUERY=~s/_TIMESTAMP_/$timestamp/;
-		$URL_QUERY=~s/_TRANSID_/$transaction_id/;
-		$message=~s/_IMSI_/$query/;
-		$message=~s/_ACTIVE_/$options/;
-		$message=~s/_MNC_/$options/;
-		$message=~s/_MCC_/$options1/;
-		$message=~s/_DEST_/$options/;
-		$message=~s/_CODE_/$options/;
-		$message=~s/_SUBCODE_/$options1/;
-		$URL=qq[$URL_QUERY;$message];
+		$URL=${SQL(qq[SELECT get_message($query,"$message_code",$host,$query,$options,$options1)],2)}[0];
 		&response('LOG',"$code-URL-SET","$URL")if $debug>3;
 	}#case sendresale
+#####
 	else{
 		return 0;
 	}#else switch code
 }#switch code
 #
-our $SENDGET=qq[$host$URL] if $URL;
+our $SENDGET=qq[$URL] if $URL;
 #
-&response('LOGDB',"$code","$transaction_id","$query",'REQ',"$SENDGET $msrn"); 
+&response('LOGDB',"$code","$transaction_id","$query",'REQ',"$SENDGET"); 
 #
 if ($URL){
 eval {use vars qw($SENDGET); alarm(10); local $SIG{ALRM} = sub { die "SSL timeout\n" }; &response('LOG',"SENDGET-$code-LWP-REQ","$SENDGET");
@@ -1002,8 +959,6 @@ alarm(0);
 		else{ warn "Error in request: $@"; }#else other errors
 	}#if erorrs
 }#if URL
-#my $content = $lwp->get($SENDGET);
-#my @XML=$content->decoded_content if $URL;
 #
 use vars qw(@XML);
 if (@XML){
@@ -1013,11 +968,6 @@ if (@XML){
 	&response('LOGDB',$code,"$transaction_id","$query",'ERROR','SENDGET NO RESPOND') if !$SENDGET_result;
 	return $SENDGET_result;
 }#if lwp return
-elsif($msrn){
-	&response('LOG',"$code-REQUEST","REUSE $msrn");
-	&response('LOGDB',$code,"$transaction_id","$query",'REUSE',"$msrn");
-	return $msrn;
-}#elsif msrn
 else{# timeout
 	&response('LOG',"$code-REQUEST","Timed out 5 sec with socket");
 	&response('LOGDB',$code,"$transaction_id","$query",'ERROR','Timed out 10 sec with socket');
@@ -1065,7 +1015,7 @@ switch ($code){
 			else{#if CFU subscriber
 		&response('LOGDB',"$code","$Q{transactionid}","$imsi",'OK',"CFU:$card_seria $Q{auth_key}");
 		my $resale_TID="$Q{transactionid}";
-		my $limit=&SENDGET('SIG_GetTIME',$sub_id,'https://127.0.0.1',$msrn) if $card_seria eq '2';
+		my $limit=&SENDGET('SIG_GetTIME',$sub_id,'',$msrn) if $card_seria eq '2';
 		print $new_sock &response('rc_api_cmd','OK',$resale_TID,"$msrn","$limit") if $options ne 'cleartext';
 		$msrn=~s/\+// if $options eq 'cleartext';#cleartext for ${EXTEN} usage
 		print $new_sock "$resale_TID:$msrn:$limit" if $options eq 'cleartext';
@@ -1104,7 +1054,7 @@ switch ($code){
 		&response('LOGDB',"$code","$Q{transactionid}","$imsi",'REQ','');
 		my $SQL=qq[SELECT id from cc_card where useralias="$imsi" or firstname="$imsi"];
 		my $sub_id=${SQL("$SQL",2)}[0];
-		my $USSD_result=&SENDGET('SIG_GetTIME',$sub_id,'https://127.0.0.1',$Q{msisdn});
+		my $USSD_result=&SENDGET('SIG_GetTIME',$sub_id,'',$Q{msisdn});
 		&response('LOG','RC-API-CMD',"$code $USSD_result");
 		&response('LOGDB',"$code","$Q{transactionid}","$imsi",'OK',"RESULT $USSD_result");
 		print $new_sock $USSD_result if $options eq 'cleartext';
@@ -1276,8 +1226,8 @@ $SQL_T_result="-1 NO AUTH";
 &response('LOGDB',"PAYMNT","$REQUEST->{payment}{id}",0,'RSP',"$SQL_T_result @TR");
 print $new_sock "200 $SQL_T_result";
 #
-my $USSD_result=&SENDGET('SIG_SendSMSMT','','','','pmnt_ok',"$CARD_NUMBER","$REQUEST->{payment}{id}") if $SQL_T_result>0;
-$USSD_result=&SENDGET('SIG_SendSMSMT','','','','pmnt_error',"$CARD_NUMBER","$REQUEST->{payment}{id}") if $SQL_T_result<0;
+my $SMSMT_result=&SENDGET('SIG_SendSMSMT','','','','pmnt_ok',"$CARD_NUMBER","$REQUEST->{payment}{id}") if $SQL_T_result>0;
+$SMSMT_result=&SENDGET('SIG_SendSMSMT','','','','pmnt_error',"$CARD_NUMBER","$REQUEST->{payment}{id}") if $SQL_T_result<0;
 #
 return $SQL_T_result;
 }# END sub PAYMNT
@@ -1288,21 +1238,17 @@ use vars qw(%Q);
 my $ussd_request=$_[0];
 my $SQL='';
 if (($Q{imsi})&&($Q{mnc})&&($Q{mcc})&&($Q{request_type})){#if signaling request
-$SQL=qq[UPDATE cc_card set country=(select countrycode from cc_country, cc_mnc where countryname=country and mcc="$Q{mcc}" limit 1), zipcode="$Q{mcc} $Q{mnc}", tag=(select mno from cc_mnc where mnc="$Q{mnc}" and mcc="$Q{mcc}") where (useralias="$Q{imsi}" or firstname="$Q{imsi}") and country!=(select countrycode from cc_country, cc_mnc where countryname=country and mcc="$Q{mcc}" limit 1)];
-my @sql_result=&SQL($SQL);
-# SEND WELCOME SMS
-my $UPDATE_result=$sql_result[0];
-$UPDATE_result=0 if $sql_result[0] eq '0E0';
-if (($UPDATE_result eq '1')||($ussd_request==1)){#if subscriber change country or ussd request
-$SQL=qq[SELECT countryname,voice_rate,invoice_rate,sms_rate,data_rate,extra_rate from cc_mnc, cc_country where country=countryname and countrycode=(select country from cc_card where useralias="$Q{imsi}" or firstname="$Q{imsi}")];
-my @sql_result=&SQL($SQL);
-my ($countryname,$voice_rate,$invoice_rate,$sms_rate,$data_rate,$extra_rate)=@sql_result;
-my $countryrate="$voice_rate:$invoice_rate:$sms_rate:$data_rate:$extra_rate";
-my $USSD_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'mcc_new',"$countryname","$countryrate") if $ussd_request!=1;
- $USSD_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'get_ussd_codes');
-}#if change country
-#
-return $sql_result[0]; 
+	# SEND WELCOME SMS
+	my $UPDATE_result=${SQL(qq[SELECT set_country($Q{imsi},$Q{mcc},$Q{mnc})],2)}[0];
+	if (($UPDATE_result eq '1')||($ussd_request==1)){#if subscriber change country or just ussd codes request
+		$SQL=qq[SELECT countryname,voice_rate,invoice_rate,sms_rate,data_rate,extra_rate from cc_mnc, cc_country where country=countryname and countrycode=(select country from cc_card where useralias="$Q{imsi}" or firstname="$Q{imsi}")];
+			my @sql_result=&SQL($SQL);
+			my ($countryname,$voice_rate,$invoice_rate,$sms_rate,$data_rate,$extra_rate)=@sql_result;
+			my $countryrate="$voice_rate:$invoice_rate:$sms_rate:$data_rate:$extra_rate";
+			my $USSD_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'mcc_new',"$Q{imsi}","$countryrate") if $ussd_request!=1;
+			 $USSD_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'get_ussd_codes');
+		}#if change country
+return $UPDATE_result; 
 }#end if signaling
 }# END sub LU_H
 #
@@ -1321,7 +1267,7 @@ $flag=$1;$sms_opt=$2;
 $flag=~/(\d{1})(\d{1})/;
 #
 if ($1==1){#if first page
-		$sms_opt=~/(\D?)(\d{10,})\*(\w+)/;
+		$sms_opt=~/^(\D|00)?([1-9]\d{7,15})\*(\w+)/;
 		$sms_dest=$2;
 		$sms_text=$3;
 }#if first page
@@ -1357,13 +1303,13 @@ my $sql_result=&SQL($SQL);
 #internal subscriber
 						if ($SQL_inner_result>0){#internal subscriber
 							&response('LOG','SMS-REQ',"INTERNAL");
-							$sms_result=&SENDGET('SIG_SendSMSMT','','',$sms_dest,'inner_sms',"$sms_text");
+							$sms_result=&SENDGET('SIG_SendSMSMT','','',$sms_dest,'inner_sms',"$sms_text",'');
 						}#if internal
 						else{#external subscriber
 							&response('LOG','SMS-REQ',"EXTERNAL");
 							$sms_result=&SENDGET('SIG_SendSMS',$sms_dest,'','ruimtools','',"$sms_text",$sms_from);
 						}#else external
-					$SQL=qq[UPDATE cc_sms set status=$sms_result where src="$Q{msisdn}" and flag like "%$num_page" and status=0];
+					$SQL=qq[UPDATE cc_sms set status="$sms_result" where src="$Q{msisdn}" and flag like "%$num_page" and status=0];
 					my $sql_update_result=&SQL($SQL);
 					return $sms_result;
 #if return content		
