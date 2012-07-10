@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 090712rev.37.4 HFX1061 HFX1230 OPTIMAL';
+my $REV='API Server 110712rev.38.1 ADD-ON-705 SUPPORT OPTIMAL';
 ##
 #################################################################
 ## 
@@ -603,10 +603,11 @@ if ($LU>0){#if subscriber exist and active
 		$result=&resale('CB',"$IMSI","$resale","$2",NULL) if $resale ne '0';
 		return $result;
 	}elsif($ussd=$USSD=~/\*(\d{3}).?(.*)#/){#if USSD general
-		&response('LOG','MOC-SIG-USSD-REQUEST',"$1,$2,$IMSI,$sub_cid,$sub_balance,$creditlimit") if (($resale eq '0')||($1 eq '122'));
-		my $result=&USSD($1,$2,$IMSI,$sub_cid,$sub_balance,$creditlimit);# if (($resale eq '0')||($1 eq '122'));
-		&response('LOG','MOC-SIG-USSD-REQUEST',"UD,$IMSI,$resale,$1,$2") if (($resale ne '0')&&($1 ne '122'));
-		#$result=&resale('UD',"$IMSI","$resale","$1","$2") if (($resale ne '0')&&($1 ne '122'));
+		#dont send to agent out ussd codes, only special >130
+		&response('LOG','MOC-SIG-USSD-REQUEST',"$1,$2,$IMSI,$sub_cid,$sub_balance,$creditlimit") if (($resale eq '0')||($1<130));
+		my $result=&USSD($1,$2,$IMSI,$sub_cid,$sub_balance,$creditlimit) if (($resale eq '0')||($1<130));
+		&response('LOG','MOC-SIG-USSD-REQUEST',"UD,$IMSI,$resale,$1,$2") if (($resale ne '0')&&($1>130));
+		$result=&resale('UD',"$IMSI","$resale","$1","$2") if (($resale ne '0')&&($1>130));
 		return $result;
 	}#elsif ussd
 	else{
@@ -701,7 +702,7 @@ switch ($ussd_code){
 ###
 	case "000"{#SUPPORT request
 		&response('LOG','MOC-SIG-USSD-SUPPORT-REQUEST',"$ussd_code");
-		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
+		&response('LOGDB','support',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$ussd_code],1)}[0]);
 		return "USSD 0";
 	}#case 000
@@ -835,8 +836,8 @@ switch ($ussd_code){
 		&response('LOG','MOC-SIG-USSD-CODES-REQUEST',"$ussd_code");
 		&response('LOGDB','USSD',"$Q{transactionid}","$IMSI",'OK',"$ussd_code");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$ussd_code],1)}[0]);
-		my $SMSMT_result=&SENDGET('SIG_SendSMSMT','','',$Q{msisdn},'get_ussd_codes');
-		return 'USSD $SMSMT_result';
+		my $SMSMT_result=&SENDGET('SIG_SendSMSMT',NULL,NULL,$Q{msisdn},'get_ussd_codes','ruimtools',NULL);
+		return "USSD $SMSMT_result";
 	}#case 129
 	
 ###
