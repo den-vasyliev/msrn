@@ -3,7 +3,7 @@
 ####################################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 #
-# API CGI for PROXY SERVER 430712rev.12.0
+# API CGI for PROXY SERVER 130712rev.13.0
 #
 ####################################################
 #
@@ -43,14 +43,14 @@ close LOGFILE;
 &logg("GET QUERY ".$query->url(-path_info=>1,-query=>1));
 #
 foreach $field (sort ($query->param)) {
-    if ($field=~/timestamp2012/){next;}
+    if ($field=~/timestamp/){next;}
 	foreach $value ($query->param($field)) {
 $PARAM{$field}=uri_unescape($value);
 $PARAM{'xml'}=~s/<\?xml.*\?>/ / if $field eq 'xml';#for payments
 $PARAM{'POSTDATA'}=~s/POSTDATA=/ / if $field eq 'POSTDATA';#for data cdr
 &logg("CATCH QUERY $field $value");
-push @QUERY,"$field=".uri_escape($value);#for general request
-$qr=$qr."$field=".uri_escape($value).';';#for lab request
+push @QUERY,"$field=$value";#for general request
+$qr=$qr."$field=$value;";#for lab request
     }#foreach value
 push @QUERY,"code=get_stat request_type=rc_api_cmd sub_code=get_card_number transactionid=10" if $field eq 'card_number';#for payments
 }#foreach fiels

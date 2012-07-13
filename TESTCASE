@@ -127,7 +127,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?POSTDATA=%3Ccomplete-datasession-notificat
 ### END POSTDATA
 #
 ### USSD CFU
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379605;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088' 
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A127%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379605;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088' 
 #<?xml version="1.0" ?><MOC_response><transaction_id>184863</transaction_id><display_message>Unknown USSD request</display_message></MOC_response>
 ### END USSD CFU
 #
@@ -135,7 +135,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-0
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=39330;options=38067;imsi=234180000379607;code=get_stat;sub_code=get_rate;transactionid=321'
 ### END GET RATE TO DEST
 #
-### GET SESSION TIME TO DEST FROM CN (!) with out out code
+### GET SESSION TIME TO DEST FROM CN (!) with out code
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=380674014759;imsi=234180000379607;code=get_session_time;transactionid=321'
 ### END GET SESSION TIME TO DEST FROM CN
 #
