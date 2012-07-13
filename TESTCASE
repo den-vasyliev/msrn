@@ -6,7 +6,7 @@
 ####################################################
 #
 ### SIG CALLBACK
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A112%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379604;transactionid=164354;carrierid=;request_type=auth_callback_sig;mcc=280;mnc=01;msisdn=%2B447700055360;tadig=CYPCT;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379608;iccid=89234189720000000005'
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A112%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379605;transactionid=164354;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700055360;tadig=CYPCT;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379605;iccid=89234189720000000005'
 ### END SIG CALLBACK
 #
 ### SMS-MP
@@ -66,7 +66,7 @@ curl 'http://127.0.0.1:8008/roamingcenter/?request_type=LU_CDR;timestamp=2012-05
 ### END SIG LU_CDR
 
 ### USSD Your number
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379608;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088' 
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379605;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379605;iccid=89234189720000000088' 
 #<?xml version="1.0" ?><MOC_response><transaction_id>184863</transaction_id><display_message>Unknown USSD request</display_message></MOC_response>
 #
 curl 'http://127.0.0.1:8008/roamingcenter/?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000079890;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088'
@@ -95,7 +95,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?card_number=9671645459'
 ### END CHECK CARD NUMBER
 #
 ### MSISDN allocation
-curl "http://127.0.0.1/cgi-bin/api.pl?request_type=msisdn_allocation;cdr_id=43137;timestamp=2012-05-22%2007%3A47%3A35;carrierid=;IMSI=234180000379608;MSISDN=447700079965"
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=msisdn_allocation;cdr_id=43137;timestamp=2012-05-22%2007%3A47%3A35;carrierid=;IMSI=234180000379605;MSISDN=447700079965"
 ### END MSISDN allocation
 #
 ### DataAUTH
@@ -132,7 +132,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-0
 ### END USSD CFU
 #
 ### GET RATE TO DEST 126
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=+39330;options=+38067;imsi=234180000379607;code=get_stat;sub_code=get_rate;transactionid=321'
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=39330;options=38067;imsi=234180000379607;code=get_stat;sub_code=get_rate;transactionid=321'
 ### END GET RATE TO DEST
 #
 ### GET SESSION TIME TO DEST FROM CN (!) with out out code
