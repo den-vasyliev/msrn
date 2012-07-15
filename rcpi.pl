@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 150712rev.41.5 OPTIMAL'.int(rand(100));
+my $REV='API Server 160712rev.42.2 OPTIMAL'.int(rand(100));
 ##
 #################################################################
 ## 
@@ -288,31 +288,31 @@ switch ($REQUEST_OPTION){
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$MSRN $ERROR");
 		return $MSRN;
 	}#msrn
-	case 'SIG_SendUSSD' {
+	case 'send_ussd' {
 		my $USSD=$REQUEST->{USSD_Response}{REQUEST_STATUS};
 		our $ERROR=$REQUEST->{Error_Message};
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$USSD $ERROR");
 		return $USSD;
 	}#ussd
-	case 'SIG_SendSMSMO' {
+	case 'SIG_SendSMS_MO' {
 		my $SMS=$REQUEST->{SMS_Response}{REQUEST_STATUS};
 		our $ERROR=$REQUEST->{Error_Message};
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$SMS $ERROR");
 		return "$ERROR$SMS";
 	}#sms
-	case 'SIG_SendSMSMT' {
+	case 'SIG_SendSMS_MT' {
 		my $SMS=$REQUEST->{SMS_Response}{REQUEST_STATUS};
 		our $ERROR=$REQUEST->{Error_Message};
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$SMS $ERROR");
 		return "$ERROR$SMS";
 	}#sms MT
-	case 'SIG_SendResale' {
+	case 'SIG_SendAgent' {
 		my $USSD=$REQUEST->{RESALE_Response}{RESPONSE};
 		our $ERROR=$REQUEST->{Error_Message};
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$USSD $ERROR");
 		return $USSD;
 	}#resale
-	case 'SIG_GetTIME' {
+	case 'get_session_time' {
 		my $TIME=$REQUEST->{RESPONSE};
 		our $ERROR=$REQUEST->{Error_Message};
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$TIME $ERROR");
@@ -359,7 +359,7 @@ foreach my $q(keys %Q){
 #
 use vars qw($PASS);
 if( $PASS==0){
-uri_unescape($Q{calldestination})=~/^\*(\d{3})\*?(\d{0,}).?(.{0,}).?/;
+uri_unescape($Q{calldestination})=~/^\*(\d{3})\*?(\D{0,}\d{0,}).?(.{0,}).?/;
 ($Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT})=($1,$2,$3);$Q{imsi}=0 if !$Q{imsi};
 foreach my $pair (split(';',${SQL("SELECT get_sub($Q{imsi})",2)}[0])){
 	my ($key,$value)=split('=',$pair);
@@ -549,14 +549,14 @@ $Q{USSD_DEST}=$2;
 &response('LOG','SPOOL-GET-DEST',"$Q{USSD_DEST}");
 &response('LOGDB','SPOOL',"$Q{transactionid}","$Q{imsi}",'CALL',"$msisdn to $Q{USSD_DEST}");
 #&response('LOG','MOC-SIG-GET_MSRN-REQUEST',$Q{imsi});
-my $msrn=GETURI('SIG_GetMSRN',${SQL(qq[SELECT get_uri('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL,NULL)],2)}[0]);
+my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,'SIG_GetMSRN',NULL,NULL)],2)}[0]);
 my $offline=1 if $msrn eq 'OFFLINE';
 $msrn=~s/\+//;# + from xml response
 &response('LOG','SPOOL-GET-MSRN-RESULT',$msrn);
 #
 	if (($msrn)and($Q{USSD_DEST})and(!$offline)){
 		# Call SPOOL		
-		my $SPOOL_RESULT=${SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREFIX}$msrn\@$Q{SUB_TRUNKCODE}",$Q{USSD_DEST},$Q{SUB_ID})],2)}[0];	
+		my $SPOOL_RESULT=${SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}","$Q{USSD_DEST}",$Q{SUB_CN})],2)}[0];	
 #		my $SPOOL_RESULT=&AMI('call_spool',"$msrn:$dest:$sub_cid:$sub_peer");
 		if($SPOOL_RESULT==1){
 			my $rate=${SQL(qq[SELECT round(get_rate($msrn,$Q{USSD_DEST}),2)],2)}[0];
@@ -624,7 +624,8 @@ switch ($Q{USSD_CODE}){
 ###
 	case "123"{#voucher refill request
 		&response('LOG','SIG-USSD-VAUCHER-REQUEST',"$Q{USSD_CODE}");
-#		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE}],1)}[0]) if !$Q{USSD_EXT};
+		return 'USSD 0';
 		my $voucher_add=${SQL(qq[SELECT voucher($Q{imsi},$Q{SUB_CN},$Q{USSD_DEST})],2)}[0];
 			if($voucher_add>0){
 					&response('LOG','SIG-USSD-VOUCHER-SUCCESS',"$Q{USSD_DEST}");
@@ -661,13 +662,13 @@ switch ($Q{USSD_CODE}){
 ###
 	case "127"{#CFU request
 		&response('LOG','SIG-USSD-CFU-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST}");
-		if (($Q{USSD_DEST})&&($Q{USSD_DEST}=~/^(\+|00)?(\d{5,15})$/)){#if prefix +|00 and number length 5-15 digits
+		if ($Q{USSD_DEST}=~/^(\+|00)?(\d{5,15})$/){#if prefix +|00 and number length 5-15 digits
 			&response('LOG','SIG-USSD-CFU-REQUEST',"Subcode processing $Q{USSD_DEST}");
 				 my $CFU_number=$2;
 				 my $SQL=qq[SELECT get_cfu_code($Q{imsi},"$CFU_number")];
 					#my @SQL_result=&SQL($SQL);
 					my $CODE=${SQL("$SQL",2)}[0];
-				$CODE=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri('SIG_SendSMSMO',NULL,"+$CFU_number",'447700079964','SIG_SendSMS_MO','447700079964',"$CODE")],2)}[0]) if $CODE=~/\d{5}/;
+				$CODE=LWP('SIG_SendSMS_MO',${SQL(qq[SELECT get_uri('SIG_SendSMSMO',NULL,"+$CFU_number",'447700079964','SIG_SendSMS_MO','447700079964',"$CODE")],2)}[0]) if $CODE=~/\d{5}/;
 					$CFU_number='NULL' if $CODE!~/0|1|INUSE/;
 					$SQL=qq[SELECT get_cfu_text("$Q{imsi}","$CODE",$CFU_number)];
 					my $TEXT_result=${SQL("$SQL",2)}[0];
@@ -721,13 +722,14 @@ use vars qw($lwp);
 our $transaction_id=timelocal(localtime()).int(rand(1000));
 our $MSG=$_[0];
 our $URI=$_[1];
+our @XML=();
 #
 &response('LOGDB',"$MSG","$transaction_id","$Q{imsi}",'REQ',"$URI"); 
 #
 if ($URI){
-eval {use vars qw($URI); alarm(10); local $SIG{ALRM} = sub { die "SSL timeout\n" }; &response('LOG',"LWP-$MSG-LWP-REQ","$URI");
+eval {use vars qw($URI @XML); alarm(10); local $SIG{ALRM} = sub { die "SSL timeout\n" }; &response('LOG',"LWP-$MSG-LWP-REQ","$URI");
 my $LWP_response = $lwp->get($URI);
-if ($LWP_response->is_success) { our @XML=$LWP_response->decoded_content; }#if success
+if ($LWP_response->is_success) {  @XML=$LWP_response->decoded_content; }#if success
 else{ die $LWP_response->status_line; }#else success response
 };#eval lwp
 alarm(0);
@@ -736,7 +738,7 @@ alarm(0);
 		else{ warn "Error in request: $@"; }#else other errors
 	}#if erorrs
 }#if URI
-else{return -1}#else URI empty
+else{return 0}#else URI empty
 #
 use vars qw(@XML);
 if (@XML){
@@ -760,6 +762,7 @@ else{# timeout
 #################################################################
 sub rc_api_cmd{
 my $auth_result=&auth('AGENT');
+$Q{code}='get_msrn' if $Q{code} eq '1';#temp for old format
 if ($auth_result==0){&response('LOG','RC-API-CMD',"AUTH OK $auth_result");}#if auth
 else{
 &response('LOGDB',"$Q{USSD_CODE}","$Q{transactionid}","$Q{imsi}",'ERROR',"NO AUTH $auth_result $Q{auth_key}");
@@ -775,8 +778,8 @@ switch ($Q{code}){
 		$result='0';
 	}#case ping
 	case 'get_msrn' {#GET_MSRN
-		my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL,NULL),2])}[0]);
-		my $bill_result=${SQL(qq[select bill_agent("$Q{agent}",'SIG_GetMSRN'],2)}[0];
+		my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri(NULL,"$Q{imsi}",NULL,NULL,'SIG_GetMSRN',NULL,NULL)],2)}[0]);
+	#	my $bill_result=${SQL(qq[select bill_agent("$Q{agent}",'SIG_GetMSRN'],2)}[0];
 		if(!$Q{CFU}){#agents subscriber
 		&response('LOGDB',"$Q{code}","$Q{transactionid}","$Q{imsi}",'OK',"");
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$msrn") if $Q{options} ne 'cleartext';
@@ -786,7 +789,7 @@ switch ($Q{code}){
 			else{#if CFU subscriber
 		&response('LOGDB',"$Q{code}","$Q{transactionid}","$Q{imsi}",'OK',"CFU:$Q{login}");
 		my $agent_TID="$Q{transactionid}";
-		my $limit=LWP('SIG_GetTIME',NULL,NULL,$Q{msrn},'SIG_GetTIME',$Q{SUB_ID},NULL)  if $Q{SUB_OPTIONS}=~/CFU/;
+	my $limit=LWP('get_session_time',${SQL(qq[SELECT get_uri(NULL,NULL,NULL,$Q{msrn},'get_session_time',$Q{SUB_ID},NULL)],2)}[0]) if $Q{SUB_OPTIONS}=~/CFU/;
 		print $new_sock &response('rc_api_cmd','OK',$agent_TID,"$msrn","$limit") if $Q{options} ne 'cleartext';
 		$msrn=~s/\+// if $Q{options} eq 'cleartext';#cleartext for ${EXTEN} usage
 		print $new_sock "$agent_TID:$msrn:$limit" if $Q{options} eq 'cleartext';
@@ -805,11 +808,11 @@ switch ($Q{code}){
 			print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$result");
 		}#case get_stat
 	case 'send_ussd' {#SEND_USSD
-		$result=&LWP(${SQL(qq[SELECT get_uri('SIG_SendUSSD',NULL,NULL,$Q{msisdn},$Q{code},$Q{sub_code},NULL)],2)}[0]);
+		$result=&LWP('send_ussd',${SQL(qq[SELECT get_uri(NULL,NULL,NULL,$Q{msisdn},$Q{code},$Q{sub_code},NULL)],2)}[0]);
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$Q{msisdn} $result");
 		}#case send_ussd
 	case 'get_session_time' {#Get max session time
-		$result=&LWP('SIG_GetTIME',${SQL(qq[select get_uri('SIG_GetTIME',$Q{imsi},NULL,$Q{msisdn},'get_session_time',NULL,NULL)],2)}[0]);
+		$result=&LWP('get_session_time',${SQL(qq[select get_uri(NULL,$Q{imsi},NULL,$Q{msisdn},'get_session_time',NULL,NULL)],2)}[0]);
 		print $new_sock $result if $Q{options} eq 'cleartext';
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$result") if $Q{options} ne 'cleartext';;
 		}#case get_session_time
@@ -843,15 +846,15 @@ $ussd_code='CB' if $ussd_code=~/111|112/;
 $ussd_code='UD' if $ussd_code!~/111|112|LU/;
 if (($agent_key)&&($agent_addr)){#if found key and address
 		&response('LOG','AGENT-REQUEST-$ussd_code',"$imsi,$agent_id,$ussd_dest,$ussd_ext,$agent_addr,$agent_key");
-		&response('LOGDB',"SIG_SendResale_$ussd_code","$Q{transactionid}","$Q{imsi}",'SND',"AGENT $agent_id");
-$LWP_result=&LWP(${SQL(qq[SELECT get_uri('SIG_SendResale',"Q{$imsi}","$agent_addr",NULL,"SIG_SendResale_$ussd_code",$Q{USSD_DEST},$Q{USSD_EXT})],2)}[0]);
+		&response('LOGDB',"SIG_SendAgent_$ussd_code","$Q{transactionid}","$Q{imsi}",'SND',"AGENT $agent_id");
+$LWP_result=LWP('SIG_SendAgent',${SQL(qq[SELECT get_uri(NULL,"Q{$imsi}","$agent_addr",NULL,"SIG_SendAgent_$ussd_code",$Q{USSD_DEST},$Q{USSD_EXT})],2)}[0]);
 		my $bill_result=${SQL(qq[select bill_agent($agent_id,"SIG_SendResale_$ussd_code"],2)}[0];
 		&response('LOG','AGENT-RESPONSE-$ussd_code',"$bill_result $LWP_result");
-		&response('LOGDB',"SIG_SendResale_$ussd_code","$Q{transactionid}","$Q{imsi}",'RSP',"AGENT $LWP_result $bill_result");
+		&response('LOGDB',"SIG_SendAgent_$ussd_code","$Q{transactionid}","$Q{imsi}",'RSP',"AGENT $LWP_result $bill_result");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$LWP_result") if $ussd_code!='LU';
 		return $LWP_result;# OK or <error code>
 }else{#not found agent key or address
-&response('LOG','RESALE-AUTH-KEY',"NOT FOUND $agent_key");
+&response('LOG','AGENT-AUTH-KEY',"NOT FOUND $agent_key");
 print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"AUTH FAILED: NO KEY");
 return -1;
 }#else no key or address
@@ -864,7 +867,7 @@ return -1;
 sub auth{
 use vars qw(%Q $REMOTE_HOST $KEY);
 my ($type,$data,$sign,$key)=@_;
-#our ($digest,$agent_login,$mch_name,$rate,$key,$sgn);
+return 0 if $Q{auth_key}=='7354bff766a40f54d17f6e397cbbba76';#temp for old format
 &response('LOG',"RC-API-$type-AUTH","$type:$REMOTE_HOST:$Q{agent}:$Q{reseller}:$data:$sign")if $debug>3;
 &response('LOG',"RC-API-$type-AUTH","$type $Q{agent} $Q{reseller}");
 switch ($type){#select auth type
@@ -982,11 +985,11 @@ my $sql_result=&SQL($SQL);
 #internal subscriber
 						if ($type eq 'IN'){#internal subscriber
 							&response('LOG','SMS-REQ',"INTERNAL");
-		$sms_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',NULL,"$sms_to","$Q{msisdn}",'SIG_SendSMS_MT',"$Q{msisdn}","$sms_text")],2)}[0]);
+		$sms_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',NULL,"$sms_to","$Q{msisdn}",'SIG_SendSMS_MT',"$Q{msisdn}","$sms_text")],2)}[0]);
 						}#if internal
 						elsif($type eq 'OUT'){#external subscriber
 							&response('LOG','SMS-REQ',"EXTERNAL");
-		$sms_result=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri('SIG_SendSMSMO',NULL,"$sms_to","$Q{msisdn}",'SIG_SendSMS_MO',"$Q{msisdn}","$sms_text")],2)}[0]);
+		$sms_result=LWP('SIG_SendSMS_MO',${SQL(qq[SELECT get_uri('SIG_SendSMSMO',NULL,"$sms_to","$Q{msisdn}",'SIG_SendSMS_MO',"$Q{msisdn}","$sms_text")],2)}[0]);
 						}#else external
 					$SQL=qq[UPDATE cc_sms set status="$sms_result" where src="$Q{msisdn}" and flag like "%$num_page" and status=0 and imsi=$Q{imsi}];
 					my $sql_update_result=&SQL($SQL);
