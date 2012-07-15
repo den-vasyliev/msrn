@@ -10,9 +10,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A112%2A380674014759%2A82
 ### END SIG CALLBACK
 #
 ### SMS-MP
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A11%2A380674014759%2A00480065006C006C006F0020007400680069007300200069007300200074%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379608;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=120791'
-#
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A22%2A0065007300740020006D0075006C00740069002000700061006700650020006D0065007300730061%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379608;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=120762'
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A11%2A%2B380674014759%2A00480065006C006C006F00200074%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379605;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=121012';;curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A11%2A%2B380674014759%2A00480065006C006C006F00200074%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379605;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=121013'; curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A22%2A0065007300740020006D0075006C00740069002000700061006700650020006D0065007300730061%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379605;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=1208018'
 ### END SMS-MP
 #
 ## SMSContent_CDR
@@ -59,7 +57,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=ping'
 ### END CMD PING
 #
 ### SIG LU_CDR
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000379605;mcc=240;mnc=007;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000379605;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
 <?xml version="1.0" ?><CDR_response><cdr_id>59526930</cdr_id><cdr_status>1</cdr_status></CDR_response>
 #
 curl 'http://127.0.0.1:8008/roamingcenter/?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000079890;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
@@ -87,7 +85,7 @@ curl "http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=0;imsi=0;co
 ### END CMD Get Resellers MSRN count get_resale_msrn R
 #
 ### PAYMNT
-curl -k -d 'xml=<?xml version="1.0" encoding="utf-8"?><payment id="82579"><ident>83f70c0184f79eea7c14a5d5b0e33dae5aa2992e</ident><status>5</status><amount>100</amount><currency>UAH</currency><timestamp>1339709504</timestamp><transactions><transaction id="117661"><mch_id>230</mch_id><srv_id>0</srv_id><amount>100</amount><currency>UAH</currency><type>10</type><status>11</status><code>00</code><desc>Лицевой счет 9671645459</desc><info>{"acc":"9671645459","amount":1}</info></transaction><transaction id="117662"><mch_id>230</mch_id><srv_id>0</srv_id><amount>100</amount><currency>UAH</currency><type>11</type><status>11</status><code>00</code><desc>Лицевой счет 9671645459</desc><info>{"acc":"9671645459","amount":1}</info></transaction></transactions><salt>1777e98da1bbfb143df54e7efc8ebd1210258d21</salt><sign>d19beb1368e8540d303134822f43babfda39548ae486719e2b0f4d201e805ae90665f0dc44913139c02c3f244528d2cadc8ee85d03633f659a4ba63ac6def0e1</sign></payment>' https://127.0.0.1/cgi-bin/api.pl
+curl -k -d 'xml=<?xml version="1.0" encoding="utf-8"?><payment id="82590"><ident>83f70c0184f79eea7c14a5d5b0e33dae5aa2992e</ident><status>5</status><amount>100</amount><currency>UAH</currency><timestamp>1339709504</timestamp><transactions><transaction id="117670"><mch_id>230</mch_id><srv_id>0</srv_id><amount>100</amount><currency>UAH</currency><type>10</type><status>11</status><code>00</code><desc>Лицевой счет 9671645459</desc><info>{"acc":"9671645459","amount":1}</info></transaction><transaction id="117671"><mch_id>230</mch_id><srv_id>0</srv_id><amount>100</amount><currency>UAH</currency><type>11</type><status>11</status><code>00</code><desc>Лицевой счет 9671645459</desc><info>{"acc":"9671645459","amount":1}</info></transaction></transactions><salt>1777e98da1bbfb143df54e7efc8ebd1210258d21</salt><sign>d19beb1368e8540d303134822f43babfda39548ae486719e2b0f4d201e805ae90665f0dc44913139c02c3f244528d2cadc8ee85d03633f659a4ba63ac6def0e1</sign></payment>' https://127.0.0.1/cgi-bin/api.pl
 ### END PAYMNT
 #
 ### CHECK CARD NUMBER
@@ -135,7 +133,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A127%23;timestamp=2012-0
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=39330;options=38067;imsi=234180000379607;code=get_stat;sub_code=get_rate;transactionid=321'
 ### END GET RATE TO DEST
 #
-### GET SESSION TIME TO DEST FROM CN (!) with out code
+### GET SESSION TIME TO DEST FROM CN (!) with out international code
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=380674014759;imsi=234180000379607;code=get_session_time;transactionid=321'
 ### END GET SESSION TIME TO DEST FROM CN
 #

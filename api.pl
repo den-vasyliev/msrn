@@ -43,7 +43,7 @@ close LOGFILE;
 &logg("GET QUERY ".$query->url(-path_info=>1,-query=>1));
 #
 foreach $field (sort ($query->param)) {
-    if ($field=~/timestamp/){next;}
+    if ($field=~/timestamp|message_date/){next;}
 	foreach $value ($query->param($field)) {
 $PARAM{$field}=uri_unescape($value);
 $PARAM{'xml'}=~s/<\?xml.*\?>/ / if $field eq 'xml';#for payments
