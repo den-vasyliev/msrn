@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 160712rev.42.2 OPTIMAL';
+my $REV='API Server 160712rev.42.3 HFX-979 HFX-497 HFX-998 COMMENTS OPTIMAL';
 ##
 #################################################################
 ## 
@@ -494,8 +494,8 @@ if ($Q{SUB_ID}>0){#if found subscriber
 			$Q{msisdn}='+'.$Q{msisdn} if $Q{msisdn}!~/^(\+)(\d{7,15})$/;#temp for old format
 			my $UPDATE_result=${SQL(qq[SELECT set_country($Q{imsi},$Q{mcc},$Q{mnc},"$Q{msisdn}")],2)}[0];
 			if ($UPDATE_result){#if contry change
-my $TRACK_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',"$Q{imsi}",NULL,"$Q{msisdn}",'mcc_new','ruimtools',NULL)],2)}[0]);
-	$TRACK_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',NULL,NULL,"$Q{msisdn}",'get_ussd_codes','ruimtools',NULL)],2)}[0]);
+my $TRACK_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',"$Q{imsi}",NULL,"$Q{msisdn}",'mcc_new','ruimtools',NULL)],2)}[0]);
+	$TRACK_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',NULL,NULL,"$Q{msisdn}",'get_ussd_codes','ruimtools',NULL)],2)}[0]);
 				&response('LOG','MAIN-LU-HISTORY-RETURN',"$TRACK_result");
 			}#if country change
 			print $new_sock &response('LU_CDR','OK',"$Q{SUB_ID}",'1');
@@ -614,9 +614,9 @@ switch ($Q{USSD_CODE}){
 	case "122"{#SMS request
 		&response('LOG','SIG-USSD-SMS-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST} $Q{USSD_EXT}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST} $Q{USSD_EXT}");
-		my $SMS_result=SMS();
-		my $SMS_response=${SQL(qq[NULL,'ussd',$Q{USSD_CODE}$SMS_result],1)}[0];
-		$SMS_response="UNKNOWN" if $SMS_response eq '';
+		my $SMS_result=SMS();#process sms
+		my $SMS_response=${SQL(qq[NULL,'ussd',$Q{USSD_CODE}$SMS_result],1)}[0];#get response text by sms result
+		$SMS_response="Sorry, unknown result. Please call *000#" if $SMS_response eq '';#something wrong - need support
 		&response('LOG','SIG-USSD-SMS-RESULT',"$SMS_result");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'RSP',"$SMS_result");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$SMS_response");
@@ -762,7 +762,7 @@ else{# timeout
 ## Return message
 #################################################################
 sub rc_api_cmd{
-my $auth_result=&auth('AGENT');
+my $auth_result=&auth('AGENT');#turn on auth for all types of api request
 $Q{code}='get_msrn' if $Q{code} eq '1';#temp for old format
 if ($auth_result==0){&response('LOG','RC-API-CMD',"AUTH OK $auth_result");}#if auth
 else{
@@ -862,9 +862,15 @@ return -1;
 }# END sub AGENT
 ##################################################################
 #
-### SUB AUTH ##################################################################
-# $data signed by $key = $digest
-##
+### SUB AUTH ########################################################
+## Keys stored in cc_agent auth_key & cc_epaymntner auth_key
+## On insert trigger cc_agent generate md5 hash and crypt it with AES
+## ipay send email with keys one time. Crypted AES in db
+## To decrypt AES we use KEY entered on start
+## Agent send us auth_key
+## Ipay send us solt and sign
+#####################################################################
+#
 sub auth{
 use vars qw(%Q $REMOTE_HOST $KEY);
 my ($type,$data,$sign,$key)=@_;
@@ -873,21 +879,21 @@ return 0 if $Q{auth_key}=='7354bff766a40f54d17f6e397cbbba76';#temp for old forma
 &response('LOG',"RC-API-$type-AUTH","$type $Q{agent} $Q{reseller}");
 switch ($type){#select auth type
 	case "AGENT"{#resale auth
-		$REMOTE_HOST=~s/\.//g;
+		$REMOTE_HOST=~s/\.//g;#cut dots
 		$data=$REMOTE_HOST;
-		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_agent WHERE login="$Q{agent}"],2)}[0];
+		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_agent WHERE login="$Q{agent}"],2)}[0];# KEY was input on starting
 		$sign=$Q{auth_key};
 	}#case resale
 	case "PAYMNT"{#paymnt auth
-		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_epaymnter WHERE host="$REMOTE_HOST"],2)}[0];
+		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_epaymnter WHERE host="$REMOTE_HOST"],2)}[0];# KEY was input on starting
 	}#case paymnt
 else{
 	&response('LOG',"RC-API-AUTH-RETURNED","Error: UNKNOWN TYPE $type");
 	}#end else switch type
 }#end switch type 
-my $digest=hmac_sha512_hex("$data","$key");
-my $dgst=substr($digest,0,7);
-my $sgn=substr($sign,0,7);
+my $digest=hmac_sha512_hex("$data","$key");#lets sign data with key
+my $dgst=substr($digest,0,7);#short format for logfile
+my $sgn=substr($sign,0,7);#short format for logfile
 &response('LOG',"RC-API-$type-DIGEST-CHECK","$dgst eq $sgn")if $debug>=3;;
 if ($digest eq $sign){#if ok
 &response('LOG','RC-API-AUTH',"OK");
@@ -945,71 +951,73 @@ else{#else if auth
 #########################################################################
 ### sub SMS #############################################################
 sub SMS{
-use vars qw(%Q);
-my ($flag,$sms_opt,$sms_to,$sms_text,$type,$SQL);
-$flag=$Q{USSD_DEST};
-$sms_opt=$Q{USSD_EXT};
-our $sms_result;
+use vars qw(%Q);#load global array
+my ($flag,$sms_opt,$sms_to,$sms_text,$type,$SQL);#just declare
+$flag=$Q{USSD_DEST};#sms page and number
+$sms_opt=$Q{USSD_EXT};#sms text
+our $sms_result;#just declare
 #
 &response('LOG','SMS-REQ',"$Q{USSD_DEST} $Q{USSD_EXT}") if $debug>=3;
-$flag=~/(\d{1})(\d{1})/;
+$flag=~/(\d{1})(\d{1})/;#find page number and pages amount
 my ($page,$num_page)=($1,$2);
 #
 if ($page eq '1'){#if first page
-	$sms_opt=~/^(\D|00)?([1-9]\d{7,15})\*(\w+)#/;
-	$sms_to='+'.$2;
+	$sms_opt=~/^(\D|00)?([1-9]\d{7,15})\*(\w+)#/;#parse msisdn
+	$sms_to='+'.$2;#temp for old format
 	$sms_text=$3;
 }#if first page
 else{#else next page
 	$sms_to="multipage";
-	$sms_opt=~/(\w+)#/;
+	$sms_opt=~/(\w+)#/;#cut '#' symbol
 	$sms_text=$1;
 }#else next page
 #
 &response('LOG','SMS-REQ',"$flag,$sms_to");
-my $sql_erorr_update_result=${SQL(qq[UPDATE cc_sms set status="-1" where src="$Q{msisdn}" and flag="$flag" and dst="$sms_to" and status=0 and imsi=$Q{imsi}],2)}[0];#to avoid double sms
+my $sql_erorr_update_result=${SQL(qq[UPDATE cc_sms set status="-1" where src="$Q{msisdn}" and flag="$flag" and dst="$sms_to" and status=0 and imsi=$Q{imsi}],2)}[0];#to avoid double sms HFX-970
 &response('LOG','SMS-REWRITE',"$sql_erorr_update_result");
-$SQL=qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`text`,`inner_tid`,`imsi`) values ("$Q{transactionid}","$Q{msisdn}","$sms_to","$flag","$sms_text","$INNER_TID","$Q{imsi}")];
+$SQL=qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`text`,`inner_tid`,`imsi`) values ("$Q{transactionid}","$Q{msisdn}","$sms_to","$flag","$sms_text","$INNER_TID","$Q{imsi}")];#store page to db
 my $sql_result=&SQL($SQL);
 &response('LOG','SMS-REQ',"$sql_result");
 #if insert ok
 	if ($sql_result>0){#if insert ok
-#		$flag=~/(\d{1})(\d{1})/;
+#		$flag=~/(\d{1})(\d{1})/;# deprecated to 955
 #if num page
-			if ($num_page eq $page){#if num page
-				($sms_text,$sms_to,$type)=split('::',${SQL(qq[SELECT get_sms_text("$Q{msisdn}",$num_page,$Q{imsi})],2)}[0]);
+			if ($num_page eq $page){#if only one or last page - prepare sending
+				($sms_text,$sms_to,$type)=split('::',${SQL(qq[SELECT get_sms_text("$Q{msisdn}",$num_page,$Q{imsi})],2)}[0]);#get text dest and type
 #if return content		
 				if (($sms_text) and ($sms_to=~/^\+([1-9]\d{7,15})/)){#if return content
+#(!)# Here we need code to split messages by 168 symbols RFC&TODO#1
 				&response('LOG','SMS-ENC-RESULT',"$sms_text");
 				$sms_text=uri_escape($sms_text);
-				my $sms_from=$Q{msisdn};
+				my $sms_from=$Q{msisdn};#set from recipient must be in international format
 					&response('LOG','SMS-TEXT-ENC-RESULT',"$sms_text");
 					&response('LOG','SMS-SEND-PARAM',"$sms_to,'ruimtools',$sms_text,$sms_from");
 #internal subscriber
 						if ($type eq 'IN'){#internal subscriber
 							&response('LOG','SMS-REQ',"INTERNAL");
-		$sms_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',NULL,"$sms_to","$Q{msisdn}",'SIG_SendSMS_MT',"$Q{msisdn}","$sms_text")],2)}[0]);
+							$Q{msisdn}=~s/\+//;#by C9 standart in SMS_MT '+' deprecated
+		$sms_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',NULL,"$sms_to","$Q{msisdn}",'SIG_SendSMS_MT',"$Q{msisdn}","$sms_text")],2)}[0]);#send message
 						}#if internal
 						elsif($type eq 'OUT'){#external subscriber
 							&response('LOG','SMS-REQ',"EXTERNAL");
-		$sms_result=LWP('SIG_SendSMS_MO',${SQL(qq[SELECT get_uri('SIG_SendSMSMO',NULL,"$sms_to","$Q{msisdn}",'SIG_SendSMS_MO',"$Q{msisdn}","$sms_text")],2)}[0]);
+		$sms_result=LWP('SIG_SendSMS_MO',${SQL(qq[SELECT get_uri('SIG_SendSMSMO',NULL,"$sms_to","$Q{msisdn}",'SIG_SendSMS_MO',"$Q{msisdn}","$sms_text")],2)}[0]);#send message
 						}#else external
 					$SQL=qq[UPDATE cc_sms set status="$sms_result" where src="$Q{msisdn}" and flag like "%$num_page" and status=0 and imsi=$Q{imsi}];
-					my $sql_update_result=&SQL($SQL);
+					my $sql_update_result=&SQL($SQL);#update status to sending result
 					return $sms_result;
 #if return content		
 				}#if return content
 				else{#mark sms as error
 my $sql_update_result=${SQL(qq[UPDATE cc_sms set status="-1" where src="$Q{msisdn}" and flag like "%$num_page" and status=0 and imsi=$Q{imsi}],2)}[0];
-return 3;
+return 3;#if cant get text set status to -1
 					}#else mark sms
 				}#if num_page==page
 				else{#else multipage
-					return 2;
+					return 2;#multi page send uusd reply 'Wait...'
 					}#end else multipage
 					}#if insert
-				else{#else no insert
-						return -1;
+				else{#else not insert
+						return -1;#it seems that double tid
 					}#end else
 }# END sub USSD_SMS #############################################################
 #
