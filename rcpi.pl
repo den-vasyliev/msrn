@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 160712rev.42.2 OPTIMAL'.int(rand(100));
+my $REV='API Server 160712rev.42.2 OPTIMAL';
 ##
 #################################################################
 ## 
@@ -384,7 +384,7 @@ my $SQL=qq[$_[0]];
 my $flag=qq[$_[1]];
 $SQL=qq[SELECT get_text(].$SQL.qq[,NULL)] if $flag eq '1';
 my $now = localtime;
-print $LOGFILE "[$now]-[$INNER_TID]-[$timer]-[API-SQL-MYSQL]: $SQL\n" if (($debug>=2)and($SQL!~/get_auth_key/)); #DONT CALL VIA &RESPONSE
+print $LOGFILE "[$now]-[$INNER_TID]-[$timer]-[API-SQL-MYSQL]: $SQL\n" if (($debug>=2)and($SQL!~/AES_DECRYPT/)); #DONT CALL VIA &RESPONSE
 print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>3;
 #
 my ($rc, $sth);
@@ -491,6 +491,7 @@ sub LU_CDR{
 use vars qw($new_sock %Q);
 &response('LOG','LU-REQUEST-IN',"$Q{imsi} $Q{msisdn}");
 if ($Q{SUB_ID}>0){#if found subscriber
+			$Q{msisdn}='+'.$Q{msisdn} if $Q{msisdn}!~/^(\+)(\d{7,15})$/;#temp for old format
 			my $UPDATE_result=${SQL(qq[SELECT set_country($Q{imsi},$Q{mcc},$Q{mnc},"$Q{msisdn}")],2)}[0];
 			if ($UPDATE_result){#if contry change
 my $TRACK_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',"$Q{imsi}",NULL,"$Q{msisdn}",'mcc_new','ruimtools',NULL)],2)}[0]);
@@ -966,6 +967,8 @@ else{#else next page
 }#else next page
 #
 &response('LOG','SMS-REQ',"$flag,$sms_to");
+my $sql_erorr_update_result=${SQL(qq[UPDATE cc_sms set status="-1" where src="$Q{msisdn}" and flag="$flag" and dst="$sms_to" and status=0 and imsi=$Q{imsi}],2)}[0];#to avoid double sms
+&response('LOG','SMS-REWRITE',"$sql_erorr_update_result");
 $SQL=qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`text`,`inner_tid`,`imsi`) values ("$Q{transactionid}","$Q{msisdn}","$sms_to","$flag","$sms_text","$INNER_TID","$Q{imsi}")];
 my $sql_result=&SQL($SQL);
 &response('LOG','SMS-REQ',"$sql_result");
