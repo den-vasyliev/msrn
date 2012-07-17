@@ -10,7 +10,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A112%2A380674014759%2A82
 ### END SIG CALLBACK
 #
 ### SMS-MP
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A11%2A%2B380674014759%2A00480065006C006C006F00200074%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379605;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=121018';;curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A11%2A%2B380674014759%2A00480065006C006C006F00200074%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379605;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=121013'; curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A22%2A0065007300740020006D0075006C00740069002000700061006700650020006D0065007300730061%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379605;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=1208018'
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A23%2A%2B380674014759%2A00480065006C006C006F00200074%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379605;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=121022';;curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A11%2A%2B380674014759%2A00480065006C006C006F00200074%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379605;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=121013'; curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A122%2A22%2A0065007300740020006D0075006C00740069002000700061006700650020006D0065007300730061%23;timestamp=2012-06-01%2013%3A47%3A16;imsi=234180000379605;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=06;msisdn=%2B447700079964;tadig=UKRAS;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088;transactionid=1208018'
 ### END SMS-MP
 #
 ## SMSContent_CDR
@@ -23,7 +23,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=SMSContent_CDR;sms_type=MO;ti
 # CFU seria == 2
 # Return msrn & session limit
 ###
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&imsi=234180000379604&code=1&sub_code=0&transactionid=100&reseller=RUIMTOOLS&auth_key=ba23dce5dc2fdec04b2a25e162a2a455&options=cleartext'
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&imsi=234180000379608&code=1&sub_code=0&transactionid=100&agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5&options=cleartext'
 ### END AGENT CALL GRP
 #
 ### DEPRECATED CMD Get Rate to Dest get_rate
@@ -70,8 +70,8 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-0
 curl 'http://127.0.0.1:8008/roamingcenter/?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000079890;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088'
 ### END USSD Your number
 #
-### USSD Rates
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A128%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379608;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088'
+### USSD Balance
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A123%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379605;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079966;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379605;iccid=89234189720000000058'
 ### END USSD Rates
 #
 ### CMD Get AGENT MSRN count get_resale_msrn G
@@ -97,7 +97,7 @@ curl "http://127.0.0.1/cgi-bin/api.pl?request_type=msisdn_allocation;cdr_id=4313
 ### END MSISDN allocation
 #
 ### DataAUTH
-curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000379607;MCC=255;MNC=003;TotalCurrentByteLimit=0;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000379608;ICCID=8923418972000000007"
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000379608;MCC=226;MNC=003;TotalCurrentByteLimit=0;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000379608;ICCID=8923418972000000007"
 ### END DataAUTH
 #
 ### SMS MT
