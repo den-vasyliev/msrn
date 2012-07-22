@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 170712rev.43.2 HFX-979 HFX-497 HFX-998 HFX-574 COMMENTS OPTIMAL';
+my $REV='API Server 220712rev.46.1 HFX-979 HFX-497 HFX-998 HFX-574 HFX-639 COMMENTS OPTIMAL';
 ##
 #################################################################
 ## 
@@ -185,7 +185,7 @@ our $lwp = LWP::UserAgent->new;
 			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT URI')}
 	else {#else switch ACTION TYPE RESULT
 		use vars qw($subref);
-		if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_AGENT_ID}!=3)){#if sub options related to agent
+		if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_GRP_ID}!=1)){#if sub options related to agent
 		&response('LOG','MAIN-ACTION-TYPE-AGENT',"FOUND $Q{SUB_AGENT_ID}");
 		my $AGENT_response=agent();
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$AGENT_response");
@@ -313,7 +313,7 @@ switch ($REQUEST_OPTION){
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$SMS $ERROR");
 		return "$ERROR$SMS";
 	}#sms MT
-	case 'SIG_SendAgent' {
+	case /SIG_SendAgent/ {
 		my $USSD=$REQUEST->{RESALE_Response}{RESPONSE};
 		our $ERROR=$REQUEST->{Error_Message};
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$USSD $ERROR");
@@ -366,8 +366,8 @@ foreach my $q(keys %Q){
 #
 use vars qw($PASS);
 if( $PASS==0){
-uri_unescape($Q{calldestination})=~/^\*(\d{3})\*?(\D{0,}\d{0,}).?(.{0,}).?/;
-($Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT})=($1,$2,$3);$Q{imsi}=0 if !$Q{imsi};
+uri_unescape($Q{calldestination})=~/^\*(\d{3})(\*|\#)(\D{0,}\d{0,}).?(.{0,}).?/;
+($Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT})=($1,$3,$4);$Q{imsi}=0 if !$Q{imsi};$Q{imsi}=$Q{IMSI} if $Q{IMSI};
 foreach my $pair (split(';',${SQL("SELECT get_sub($Q{imsi})",2)}[0])){
 	my ($key,$value)=split('=',$pair);
 	$Q{$key}=$value;#foreach
@@ -526,7 +526,7 @@ sub auth_callback_sig{
 use vars qw(%Q);
 my $result;
 &response('LOG',"SIG-$Q{USSD_CODE}-REQUEST","$Q{imsi},$Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT}");
-if(($Q{SUB_STATUS}==1)||($Q{USSD_CODE}=~/^(123|100)$/)){#if subscriber active
+if(($Q{SUB_STATUS}==1)||($Q{USSD_CODE}=~/^(123|100|000)$/)){#if subscriber active
 ##CALL
 $result=&SPOOL() if $Q{USSD_CODE}=~/111|112/;
 ##USSD
@@ -636,9 +636,9 @@ switch ($Q{USSD_CODE}){
 ###
 	case "123"{#voucher refill request
 		&response('LOG','SIG-USSD-VOUCHER-BALANCE-REQUEST',"$Q{USSD_CODE}");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE}],1)}[0]) if !$Q{USSD_EXT};
-		return 'USSD 0' if !$Q{USSD_EXT};
-		my $voucher_add=${SQL(qq[SELECT voucher($Q{imsi},$Q{SUB_CN},$Q{USSD_DEST})],2)}[0];
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE}],1)}[0]) if !$Q{USSD_DEST};
+		return 'USSD 0' if !$Q{USSD_DEST};
+		my $voucher_add=${SQL(qq[SELECT voucher($Q{imsi},"$Q{SUB_CN}","$Q{USSD_DEST}")],2)}[0];
 			if($voucher_add>0){
 					&response('LOG','SIG-USSD-VOUCHER-SUCCESS',"$Q{USSD_DEST}");
 					&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST}");
@@ -854,20 +854,13 @@ use vars qw(%Q);
 my $LWP_result;
 my $ussd_code='CB' if $Q{USSD_CODE}=~/111|112/;
 $ussd_code='UD' if $Q{USSD_CODE}!~/111|112|LU/;
+$ussd_code=$Q{request_type} if $Q{request_type}=~/CDR|POSTDATA|DataAUTH|SMS/;
 #if (($agent_key)&&($agent_addr)){#if found key and address
 		&response('LOG',"AGENT-REQUEST-$ussd_code","$Q{SUB_AGENT_ID}");
-#		&response('LOGDB',"SIG_SendAgent_$ussd_code","$Q{transactionid}","$Q{imsi}",'SND',"AGENT $agent_id");
-$LWP_result=LWP('SIG_SendAgent',${SQL(qq[SELECT get_uri(NULL,"Q{imsi}","$Q{SUB_AGETN_ADDR}",NULL,"SIG_SendAgent_$ussd_code",$Q{USSD_DEST},$Q{USSD_EXT})],2)}[0]);
-#		my $bill_result=${SQL(qq[select bill_agent($Q{SUB_AGENT_ID}agent_id,"SIG_SendResale_$ussd_code"],2)}[0];
-		&response('LOG','AGENT-RESPONSE-$ussd_code',"$LWP_result");
-#		&response('LOGDB',"SIG_SendAgent_$ussd_code","$Q{transactionid}","$Q{imsi}",'RSP',"AGENT $LWP_result $bill_result");
-#		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"agents response");
-#		return $LWP_result;# OK or <error code>
-#}else{#not found agent key or address
-#&response('LOG','AGENT-AUTH-KEY',"NOT FOUND $agent_key");
-#print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"AUTH FAILED: NO KEY");
-return 'a';
-#}#else no key or address
+$LWP_result=LWP("SIG_SendAgent_$ussd_code",${SQL(qq[SELECT get_uri(NULL,"$Q{imsi}","$Q{SUB_AGENT_ADDR}",NULL,"SIG_SendAgent_$ussd_code","$Q{USSD_CODE}","$Q{USSD_DEST}")],2)}[0]);
+		my $bill_result=${SQL(qq[select bill_agent($Q{SUB_AGENT_ID},"SIG_SendAgent_$ussd_code")],2)}[0];
+		&response('LOG',"AGENT-RESPONSE-$ussd_code","$LWP_result");
+return $LWP_result;
 }# END sub AGENT
 ##################################################################
 #
@@ -950,9 +943,9 @@ else{#else if auth
 	$SQL_T_result="-1";
 	&response('LOG','PAYMNT-AUTH-RESULT',"NO AUTH");
 }#end esle if auth
-	&response('LOGDB',"PAYMNT","$REQUEST->{payment}{id}",0,'RSP',"$SQL_T_result @TR");
+	&response('LOGDB',"PAYMNT","$REQUEST->{payment}{id}","$CARD_NUMBER",'RSP',"$SQL_T_result @TR");
 	print $new_sock "200 $SQL_T_result";
-	my $SMSMT_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',NULL,NULL,NULL,"pmnt_$SQL_T_result","$CARD_NUMBER","$REQUEST->{payment}{id}")],2)}[0]);# we cant send this sms with no auth because dont known whom
+	my $SMSMT_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',"$CARD_NUMBER",NULL,NULL,"pmnt_$SQL_T_result","$CARD_NUMBER","$REQUEST->{payment}{id}")],2)}[0]);# we cant send this sms with no auth because dont known whom
 	return $SQL_T_result;
 }# END sub PAYMNT ##################################################################
 #
