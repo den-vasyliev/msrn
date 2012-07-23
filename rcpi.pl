@@ -4,11 +4,12 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 230712rev.46.2 AMISELF';
+my $REV='API Server 240712rev.46.4 AMISELF';
 ##
 #################################################################
 ## 
 ########## MODULES ##############################################
+use threads;
 use DBI;
 use Data::Dumper;
 use IO::Socket;
@@ -90,6 +91,7 @@ our $LOGFILE = IO::File->new("/opt/ruimtools/log/rcpi.log", "a+");
 ########## CONFIGURATION FOR MAIN SOCKET ########################
 my $HOST='127.0.0.1';
 my $PORT='35001';
+my $AMI_Port='5038';
 #################################################################
 #
 ########## CONNECT TO MYSQL #####################################
@@ -100,7 +102,12 @@ die "No auth!" unless defined($dbh);
 #################################################################
 #
 ############### AMI #############################################
-our $AMI = Asterisk::AMI->new(PeerAddr => '127.0.0.1',PeerPort => '5038',Username => 'admin',Secret => "$AMI",Events => 'on',TCP_Keepalive => 1);
+our $AMI = new IO::Socket::INET (PeerAddr => $HOST,PeerPort => $AMI_Port,Proto => 'tcp','Type' => SOCK_STREAM,'Timeout' => 3);
+print $AMI
+      "Action: login\r\n" .
+      "Username: admin\r\n" .
+      "Secret: admin\r\n" .
+      "\r\n";
 #################################################################
 #
 ############### LWP #############################################
@@ -125,39 +132,52 @@ our $sock = new IO::Socket::INET (LocalHost => $HOST,LocalPort => $PORT,Proto =>
 our $read_set = new IO::Select($sock); 
 our $new_sock;
 #
+####################### MULTITHREADING ##########################
+my (%th,$tid,$new);
+
+#################################################################
 while(1) {#forever
-		my ($read_handle_set) = IO::Select->select($read_set, undef, undef, undef);
-		#while(my @ready = $read_set->can_read) {
-		foreach $new_sock (@$read_handle_set) { 
-			if ($new_sock == $sock) {
-				my $new = $new_sock->accept();
-				$read_set->add($new);
-				print "RUIMTOOLS-$REV\n";
-			}else {#processing 
-					while(our $XML_REQUEST=<$new_sock>){
-						if ($XML_REQUEST =~/897234jhdln328sLUV/){
-							our $INNER_TID;
-							my ($s, $usec) = gettimeofday();my $format = "%06d";$usec=sprintf($format,$usec);$INNER_TID=$s.$usec;
-							&response('LOG',"API-SOCKET-OPEN","##################################################");
-							&response('LOG','SOCKET',"OPEN $new_sock");
-							&main();
-							&response('LOG','SOCKET',"CLOSE $new_sock");
-							&response('LOG',"API-SOCKET-CLOSE","##################################################");
-							$read_set->remove($new_sock);close($new_sock);
-						}else{ 
-							$read_set->remove($new_sock);close($new_sock);
-						}#else closed socket
-				}#while
-			}#else processing
-		}#foreach
-	#}#while ready
+	my ($read_handle_set) = IO::Select->select($read_set, undef, undef, undef);
+		foreach $new_sock (@$read_handle_set) {
+#	my $thr=threads->create( sub{	
+#					if ($new_sock == $sock) {
+#				$new = $new_sock->accept();
+#				$read_set->add($new);
+#				print "RUIMTOOLS-$REV\n";	
+#			}else {#processing 
+#					while(our $XML_REQUEST=<$new_sock>){
+#						if ($XML_REQUEST =~/897234jhdln328sLUV/){
+#							our $INNER_TID;
+#							my ($s, $usec) = gettimeofday();my $format = "%06d";$usec=sprintf($format,$usec);$INNER_TID=$s.$usec;
+#							&response('LOG',"API-SOCKET-OPEN","##################################################");
+#							&response('LOG','SOCKET',"OPEN $new_sock");
+#							main();
+#							#threads->new(\&main)->detach();
+#							&response('LOG','SOCKET',"CLOSE $new_sock");
+#							&response('LOG',"API-SOCKET-CLOSE","##################################################");
+#							$read_set->remove($new_sock);
+#							close($new_sock);
+#						}else{#no key - close 
+#							$read_set->remove($new_sock);
+#							$new_sock->close;
+#						}#else close socket
+#				}#while
+#			}#else processing
+#		})->detach();
+#		my $tid = $thr->tid();
+		print "thread", time(),"\n";
+		$new_sock->close;
+	}#foreach
 } #while(1)
 ###############################################################
 #
+sub test{use vars qw($XML_REQUEST);print $new_sock "thread $_[0] =>", time()," \n"; sleep 5 if ($XML_REQUEST=~/slp/);}
 ########## MAIN #################################################
 ## Main procedure to control all functions
 #################################################################
 sub main{
+my $dbh = DBI->connect('DBI:mysql:msrn',$LOGIN,$PASS);
+die "No auth!" unless defined($dbh);
 use vars qw($XML_REQUEST $INNER_TID $LOGFILE $new_sock %Q);
 our $lwp = LWP::UserAgent->new;
 	our %XML_KEYS=&XML_PARSE($XML_REQUEST,'SIG_GetXML');
@@ -574,19 +594,25 @@ $msrn=~s/\+//;#supress \+ from xml response
 #print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[select get_text($Q{imsi},'spool','wait',"$msrn:$Q{USSD_DEST}")],2)}[0]);
 print $new_sock response('auth_callback_sig','OK',$Q{transactionid},"Please wait... Calling to $Q{USSD_DEST}");
 # Call SPOOL	
-		my $SPOOL_RESULT=	$AMI->action({Action => 'Originate',
-                                     Channel => "$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}",
-                                     Context => 'a2billing-callback',
-                                     Exten =>	"$Q{USSD_DEST}",
-                                     CallerID => "+$Q{USSD_DEST}",
-                                     Priority => 1,
-                                     ActionID => "$uniqueid",
-                                     Async => 1,
-                                     Variable => ["CALLED=$msrn","CALLING=$Q{USSD_DEST}","CBID=$uniqueid","LEG=$Q{SUB_CN}"], });
+		my $SPOOL_RESULT;	
+									my $AMI_Action=
+									"Action: Originate\r\n".
+                                    "Channel: $Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}\r\n".
+                                    "Context: a2billing-callback\r\n".
+                                    "Exten: $Q{USSD_DEST}\r\n".
+                                    "CallerID: $Q{USSD_DEST}\r\n".
+                                    "CallerIDName: <$Q{USSD_DEST}>\r\n".
+                                    "Priority: 1\r\n".
+                                    "ActionID: $uniqueid\r\n".
+                                    "Async: 1\r\n".
+                                    "Account: $Q{SUB_CN}\r\n".
+                                    "Variable: CALLED=$msrn,CALLING=$Q{USSD_DEST},CBID=$uniqueid,LEG=$Q{SUB_CN}\r\n".
+                                    "\r\n";
+print $AMI $AMI_Action;
 #			
-&response('LOG','SPOOL-AMI-RETURN',"$SPOOL_RESULT->{'Message'} $SPOOL_RESULT->{'GOOD'} $SPOOL_RESULT->{'Response'}");			
-${SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}","$Q{USSD_DEST}","$Q{SUB_CN}","$SPOOL_RESULT->{'Response'}")],2)}[0];	
-		if($SPOOL_RESULT->{'GOOD'}==1){
+&response('LOG','SPOOL-AMI-RETURN',"$SPOOL_RESULT->{'Message'} $SPOOL_RESULT->{'GOOD'} $SPOOL_RESULT->{'Response'} $AMI_Action");			
+SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}","$Q{USSD_DEST}","$Q{SUB_CN}","$SPOOL_RESULT->{'Response'}")],2);	
+		if($SPOOL_RESULT->{'GOOD'} eq '1'){
 #			my $rate=${SQL(qq[SELECT round(get_rate($msrn,$Q{USSD_DEST}),2)],2)}[0];
 			&response('LOG','SPOOL-GET-SPOOL',$SPOOL_RESULT->{'GOOD'});
 			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'SPOOL',"$uniqueid");
@@ -793,6 +819,7 @@ else{# timeout
 ## Return message
 #################################################################
 sub rc_api_cmd{
+use vars qw($INNER_TID);
 my $auth_result=&auth('AGENT');#turn on auth for all types of api request
 $Q{code}='get_msrn' if $Q{code} eq '1';#temp for old format
 if ($auth_result==0){&response('LOG','RC-API-CMD',"AUTH OK $auth_result");}#if auth
@@ -806,7 +833,8 @@ my $result;
 &response('LOGDB',"$Q{code}","$Q{transactionid}","$Q{imsi}",'STAT',"$Q{'sub_code'} $Q{'options'}");
 switch ($Q{code}){
 	case 'ping' {#PING
-		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"PING OK");
+		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"PING OK $INNER_TID");
+		sleep 25 if $Q{options} eq 'sleep';
 		$result='0';
 	}#case ping
 	case 'get_msrn' {#GET_MSRN
@@ -897,7 +925,7 @@ return $LWP_result;
 sub auth{
 use vars qw(%Q $REMOTE_HOST $KEY);
 my ($type,$data,$sign,$key)=@_;
-return 0 if $Q{auth_key}=='7354bff766a40f54d17f6e397cbbba76';#temp for old format
+return 0 if $Q{auth_key} eq '7354bff766a40f54d17f6e397cbbba76';#temp for old format
 &response('LOG',"RC-API-$type-AUTH","$type:$REMOTE_HOST:$Q{agent}:$Q{reseller}:$data:$sign")if $debug>3;
 &response('LOG',"RC-API-$type-AUTH","$type $Q{agent} $Q{reseller}");
 switch ($type){#select auth type
