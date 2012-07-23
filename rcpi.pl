@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 220712rev.46.1 HFX-979 HFX-497 HFX-998 HFX-574 HFX-639 COMMENTS OPTIMAL';
+my $REV='API Server 230712rev.46.2 AMISELF';
 ##
 #################################################################
 ## 
@@ -18,6 +18,7 @@ use Digest::SHA qw(hmac_sha512_hex);
 use Digest::MD5 qw(md5);
 use URI::Escape;
 use LWP::UserAgent;
+use Asterisk::AMI;
 #use LWP::ConnCache::MaxKeepAliveRequests;
 use Switch;
 use POSIX;
@@ -36,6 +37,8 @@ print STDOUT "Enter login:\n";
 chop(my $LOGIN = <STDIN>);
 print STDOUT "Enter passwd:\n";
 chop(my $PASS = <STDIN>);
+print STDOUT "Enter AMI:\n";
+chop(my $AMI = <STDIN>);
 print STDOUT "Enter key:\n";
 chop(our $KEY = <STDIN>);
 system('stty','echo');
@@ -95,7 +98,12 @@ die "No auth!" unless defined($dbh);
 #
 &response('LOG','API',"$REV Ready at $$ deb $debug");
 #################################################################
-############### LWP ##############################################
+#
+############### AMI #############################################
+our $AMI = Asterisk::AMI->new(PeerAddr => '127.0.0.1',PeerPort => '5038',Username => 'admin',Secret => "$AMI",Events => 'on',TCP_Keepalive => 1);
+#################################################################
+#
+############### LWP #############################################
 #use LWP::ConnCache::MaxKeepAliveRequests;
 #our $lwp = LWP::UserAgent->new;
 #$lwp->conn_cache(
@@ -105,6 +113,7 @@ die "No auth!" unless defined($dbh);
 #    )
 #);
 #################################################################
+#
 ########## SYSTEM PROMPTS #######################################
 our %SYS=(0=>'CARD CANCELED',1=>'ACTIVE',2=>'NEW CARD. WAIT FOR REGISTRATION',3=>'WAITING CONFIRMATION',4=>'CARD RESERVED',5=>'CARD EXPIRED',6=>'CARD SUSPENDED FOR UNDERPAYMENT',9=>'RESALE');
 #
@@ -547,7 +556,7 @@ return $result;
 ## Spooling call
 ##############################################
 sub SPOOL{
-use vars qw($ERROR %Q $sql_aff_rows);
+use vars qw($ERROR %Q $sql_aff_rows $AMI);
 my $msisdn=uri_unescape($Q{msisdn});
 my $uniqueid=timelocal(localtime())."-".int(rand(1000000));
 $Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{7,15})$/;
@@ -562,12 +571,24 @@ $msrn=~s/\+//;#supress \+ from xml response
 &response('LOG','SPOOL-GET-MSRN-RESULT',$msrn);
 #
 	if (($msrn)and(!$offline)){
-		# Call SPOOL		
-		my $SPOOL_RESULT=${SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}","$Q{USSD_DEST}",$Q{SUB_CN})],2)}[0];	
-		if($SPOOL_RESULT==1){
-			my $rate=${SQL(qq[SELECT round(get_rate($msrn,$Q{USSD_DEST}),2)],2)}[0];
-			&response('LOG','SPOLL-GET-SPOOL',$sql_aff_rows);
-			print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[select get_text($Q{imsi},'spool','wait',"$msrn:$Q{USSD_DEST}")],2)}[0]);
+#print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[select get_text($Q{imsi},'spool','wait',"$msrn:$Q{USSD_DEST}")],2)}[0]);
+print $new_sock response('auth_callback_sig','OK',$Q{transactionid},"Please wait... Calling to $Q{USSD_DEST}");
+# Call SPOOL	
+		my $SPOOL_RESULT=	$AMI->action({Action => 'Originate',
+                                     Channel => "$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}",
+                                     Context => 'a2billing-callback',
+                                     Exten =>	"$Q{USSD_DEST}",
+                                     CallerID => "+$Q{USSD_DEST}",
+                                     Priority => 1,
+                                     ActionID => "$uniqueid",
+                                     Async => 1,
+                                     Variable => ["CALLED=$msrn","CALLING=$Q{USSD_DEST}","CBID=$uniqueid","LEG=$Q{SUB_CN}"], });
+#			
+&response('LOG','SPOOL-AMI-RETURN',"$SPOOL_RESULT->{'Message'} $SPOOL_RESULT->{'GOOD'} $SPOOL_RESULT->{'Response'}");			
+${SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}","$Q{USSD_DEST}","$Q{SUB_CN}","$SPOOL_RESULT->{'Response'}")],2)}[0];	
+		if($SPOOL_RESULT->{'GOOD'}==1){
+#			my $rate=${SQL(qq[SELECT round(get_rate($msrn,$Q{USSD_DEST}),2)],2)}[0];
+			&response('LOG','SPOOL-GET-SPOOL',$SPOOL_RESULT->{'GOOD'});
 			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'SPOOL',"$uniqueid");
 			return 'SPOOL SUCCESS 0';
 		}else{
