@@ -4,7 +4,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 240712rev.46.4 AMISELF';
+my $REV='API Server 240712rev.46.5 AMISELF';
 ##
 #################################################################
 ## 
@@ -13,7 +13,7 @@ use threads;
 use DBI;
 use Data::Dumper;
 use IO::Socket;
-use IO::Select;
+#use IO::Select;
 use XML::Simple;
 use Digest::SHA qw(hmac_sha512_hex);
 use Digest::MD5 qw(md5);
@@ -95,8 +95,8 @@ my $AMI_Port='5038';
 #################################################################
 #
 ########## CONNECT TO MYSQL #####################################
-our $dbh = DBI->connect('DBI:mysql:msrn',$LOGIN,$PASS);
-die "No auth!" unless defined($dbh);
+#our $dbh = DBI->connect('DBI:mysql:msrn',$LOGIN,$PASS);
+#die "No auth!" unless defined($dbh);
 #
 &response('LOG','API',"$REV Ready at $$ deb $debug");
 #################################################################
@@ -106,7 +106,7 @@ our $AMI = new IO::Socket::INET (PeerAddr => $HOST,PeerPort => $AMI_Port,Proto =
 print $AMI
       "Action: login\r\n" .
       "Username: admin\r\n" .
-      "Secret: admin\r\n" .
+      "Secret: $AMI\r\n" .
       "\r\n";
 #################################################################
 #
@@ -128,58 +128,46 @@ our %SYS=(0=>'CARD CANCELED',1=>'ACTIVE',2=>'NEW CARD. WAIT FOR REGISTRATION',3=
 # Multiplexing sockets handlers
 #################################################################
 #
-our $sock = new IO::Socket::INET (LocalHost => $HOST,LocalPort => $PORT,Proto => 'tcp',Listen => 32,ReuseAddr => 1,);
-our $read_set = new IO::Select($sock); 
+our $sock = new IO::Socket::INET (LocalHost => $HOST,LocalPort => $PORT,Proto => 'tcp',Listen => 32,ReuseAddr => 1,); 
 our $new_sock;
 #
 ####################### MULTITHREADING ##########################
-my (%th,$tid,$new);
-
-#################################################################
-while(1) {#forever
-	my ($read_handle_set) = IO::Select->select($read_set, undef, undef, undef);
-		foreach $new_sock (@$read_handle_set) {
-#	my $thr=threads->create( sub{	
-#					if ($new_sock == $sock) {
-#				$new = $new_sock->accept();
-#				$read_set->add($new);
-#				print "RUIMTOOLS-$REV\n";	
-#			}else {#processing 
-#					while(our $XML_REQUEST=<$new_sock>){
-#						if ($XML_REQUEST =~/897234jhdln328sLUV/){
-#							our $INNER_TID;
-#							my ($s, $usec) = gettimeofday();my $format = "%06d";$usec=sprintf($format,$usec);$INNER_TID=$s.$usec;
-#							&response('LOG',"API-SOCKET-OPEN","##################################################");
-#							&response('LOG','SOCKET',"OPEN $new_sock");
-#							main();
-#							#threads->new(\&main)->detach();
-#							&response('LOG','SOCKET',"CLOSE $new_sock");
-#							&response('LOG',"API-SOCKET-CLOSE","##################################################");
-#							$read_set->remove($new_sock);
-#							close($new_sock);
-#						}else{#no key - close 
-#							$read_set->remove($new_sock);
-#							$new_sock->close;
-#						}#else close socket
-#				}#while
-#			}#else processing
-#		})->detach();
-#		my $tid = $thr->tid();
-		print "thread", time(),"\n";
-		$new_sock->close;
-	}#foreach
-} #while(1)
-###############################################################
+while ($new_sock = $sock->accept) {#accept incoming connection
+    async(\&hndl, $new_sock)->detach;#create async thread for socket connection
+    close $new_sock;#close socket
+}#while accept
 #
-sub test{use vars qw($XML_REQUEST);print $new_sock "thread $_[0] =>", time()," \n"; sleep 5 if ($XML_REQUEST=~/slp/);}
+sub hndl{#thread handle
+	$new_sock = shift;#next new_sock
+    while (our $XML_REQUEST=<$new_sock>) {#read input
+        if ($XML_REQUEST =~/897234jhdln328sLUV/){#if input from api.pl
+        	our $INNER_TID;#define inner tid
+			my ($s, $usec) = gettimeofday();my $format = "%06d";$usec=sprintf($format,$usec);$INNER_TID=$s.$usec;#create inner tid
+			&response('LOG',"API-SOCKET-OPEN","##################################################");
+			&response('LOG','SOCKET',"OPEN $new_sock");
+			main();#call main
+			&response('LOG','SOCKET',"CLOSE $new_sock");
+			&response('LOG',"API-SOCKET-CLOSE","##################################################");
+			close($new_sock);#close sock
+		}else{#no key - close 
+			$new_sock->close;#close sock if no key
+			return -1;
+		}#else close socket
+	}#while read input
+}#hndl
+#################################################################
+#
 ########## MAIN #################################################
 ## Main procedure to control all functions
 #################################################################
 sub main{
-my $dbh = DBI->connect('DBI:mysql:msrn',$LOGIN,$PASS);
-die "No auth!" unless defined($dbh);
+#
 use vars qw($XML_REQUEST $INNER_TID $LOGFILE $new_sock %Q);
+########## CONNECT TO MYSQL #####################################
+our $dbh = DBI->connect('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless defined($dbh);#need to be here for thread
+#################################################################
 our $lwp = LWP::UserAgent->new;
+#################################################################
 	our %XML_KEYS=&XML_PARSE($XML_REQUEST,'SIG_GetXML');
 	my $qkeys= keys %XML_KEYS;
 	&response('LOG','MAIN-XML-PARSE-RETURN',$qkeys);
@@ -834,7 +822,7 @@ my $result;
 switch ($Q{code}){
 	case 'ping' {#PING
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"PING OK $INNER_TID");
-		sleep 25 if $Q{options} eq 'sleep';
+		sleep 7 if $Q{options} eq 'sleep';
 		$result='0';
 	}#case ping
 	case 'get_msrn' {#GET_MSRN
