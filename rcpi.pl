@@ -1,10 +1,11 @@
-#!/usr/bin/perl
+#!/usr/local/bin/perl
+#/usr/bin/perl
 #/opt/local/bin/perl -T
 #
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 240712rev.46.5 AMISELF';
+my $REV='API Server 250712rev.47.2 AMISELF-THREAD';
 ##
 #################################################################
 ## 
@@ -19,7 +20,7 @@ use Digest::SHA qw(hmac_sha512_hex);
 use Digest::MD5 qw(md5);
 use URI::Escape;
 use LWP::UserAgent;
-use Asterisk::AMI;
+#use Asterisk::AMI;
 #use LWP::ConnCache::MaxKeepAliveRequests;
 use Switch;
 use POSIX;
@@ -38,8 +39,6 @@ print STDOUT "Enter login:\n";
 chop(my $LOGIN = <STDIN>);
 print STDOUT "Enter passwd:\n";
 chop(my $PASS = <STDIN>);
-print STDOUT "Enter AMI:\n";
-chop(my $AMI = <STDIN>);
 print STDOUT "Enter key:\n";
 chop(our $KEY = <STDIN>);
 system('stty','echo');
@@ -106,7 +105,7 @@ our $AMI = new IO::Socket::INET (PeerAddr => $HOST,PeerPort => $AMI_Port,Proto =
 print $AMI
       "Action: login\r\n" .
       "Username: admin\r\n" .
-      "Secret: $AMI\r\n" .
+      "Secret: admin\r\n" .
       "\r\n";
 #################################################################
 #
@@ -142,12 +141,13 @@ sub hndl{#thread handle
     while (our $XML_REQUEST=<$new_sock>) {#read input
         if ($XML_REQUEST =~/897234jhdln328sLUV/){#if input from api.pl
         	our $INNER_TID;#define inner tid
+        	my $thr=threads->tid();
 			my ($s, $usec) = gettimeofday();my $format = "%06d";$usec=sprintf($format,$usec);$INNER_TID=$s.$usec;#create inner tid
-			&response('LOG',"API-SOCKET-OPEN","##################################################");
+			&response('LOG',"API-SOCKET-OPEN $thr","##################################################");
 			&response('LOG','SOCKET',"OPEN $new_sock");
 			main();#call main
 			&response('LOG','SOCKET',"CLOSE $new_sock");
-			&response('LOG',"API-SOCKET-CLOSE","##################################################");
+			&response('LOG',"API-SOCKET-CLOSE $thr","##################################################");
 			close($new_sock);#close sock
 		}else{#no key - close 
 			$new_sock->close;#close sock if no key
@@ -164,9 +164,11 @@ sub main{
 #
 use vars qw($XML_REQUEST $INNER_TID $LOGFILE $new_sock %Q);
 ########## CONNECT TO MYSQL #####################################
-our $dbh = DBI->connect('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless defined($dbh);#need to be here for thread
+our $dbh = DBI->connect('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless defined($dbh);#need to be here for threads
 #################################################################
+$ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;
 our $lwp = LWP::UserAgent->new;
+#$lwp->ssl_opts(verify_hostname =>0);
 #################################################################
 	our %XML_KEYS=&XML_PARSE($XML_REQUEST,'SIG_GetXML');
 	my $qkeys= keys %XML_KEYS;
@@ -578,7 +580,7 @@ my $offline=1 if $msrn eq 'OFFLINE';
 $msrn=~s/\+//;#supress \+ from xml response
 &response('LOG','SPOOL-GET-MSRN-RESULT',$msrn);
 #
-	if (($msrn)and(!$offline)){
+	if (($msrn=~/\d{7,15}/)and(!$offline)){
 #print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[select get_text($Q{imsi},'spool','wait',"$msrn:$Q{USSD_DEST}")],2)}[0]);
 print $new_sock response('auth_callback_sig','OK',$Q{transactionid},"Please wait... Calling to $Q{USSD_DEST}");
 # Call SPOOL	
@@ -775,7 +777,9 @@ our @XML=();
 if ($URI){
 eval {use vars qw($URI @XML); alarm(10); local $SIG{ALRM} = sub { die "SSL timeout\n" }; &response('LOG',"LWP-$MSG-LWP-REQ","$URI");
 my $LWP_response = $lwp->get($URI);
-if ($LWP_response->is_success) {  @XML=$LWP_response->decoded_content; }#if success
+ &response('LOG',"LWP-$MSG-LWP-RSP",$LWP_response->as_string()) if $debug>3; 
+if ($LWP_response->is_success) {  @XML=$LWP_response->decoded_content;
+}#if success
 else{ die $LWP_response->status_line; }#else success response
 };#eval lwp
 alarm(0);
@@ -821,7 +825,7 @@ my $result;
 &response('LOGDB',"$Q{code}","$Q{transactionid}","$Q{imsi}",'STAT',"$Q{'sub_code'} $Q{'options'}");
 switch ($Q{code}){
 	case 'ping' {#PING
-		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"PING OK $INNER_TID");
+		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"PING OK ".time()." $INNER_TID");
 		sleep 7 if $Q{options} eq 'sleep';
 		$result='0';
 	}#case ping
