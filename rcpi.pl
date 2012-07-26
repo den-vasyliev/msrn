@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 250712rev.47.2 AMISELF-THREAD';
+my $REV='API Server 250712rev.47.3 HFX-654 AMISELF-THREAD';
 ##
 #################################################################
 ## 
@@ -650,11 +650,10 @@ switch ($Q{USSD_CODE}){
 	}#case 100
 ###
 	case "110"{#IMEI request
-		&response('LOG','SIG-USSD-IMEI-REQUEST',"$Q{USSD_CODE}");
+		&response('LOG','SIG-USSD-IMEI-REQUEST',"$Q{USSD_DEST}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST}");
-		$Q{USSD_CODE}=~/(\d+)\*(\w+)\*(\d+)/;
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Your IMEI: $1");
-		my $SQL=qq[UPDATE cc_card set address="$1 $2" where useralias="$Q{imsi}" or firstname="$Q{imsi}"];
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"RuimTools registered");
+		my $SQL=qq[UPDATE cc_card set address="$Q{USSD_DEST} $Q{USSD_EXT}" where useralias="$Q{imsi}" or firstname="$Q{imsi}"];
 		my $SQL_result=&SQL($SQL);
 		return "USSD $SQL_result";
 	}#case 110
