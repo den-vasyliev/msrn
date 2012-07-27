@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 250712rev.47.3 HFX-654 AMISELF-THREAD';
+my $REV='API Server 270712rev.48.0 HFX-654 HFX-261 HFX-600 AMISELF-THREAD';
 ##
 #################################################################
 ## 
@@ -14,13 +14,11 @@ use threads;
 use DBI;
 use Data::Dumper;
 use IO::Socket;
-#use IO::Select;
 use XML::Simple;
 use Digest::SHA qw(hmac_sha512_hex);
 use Digest::MD5 qw(md5);
 use URI::Escape;
 use LWP::UserAgent;
-#use Asterisk::AMI;
 #use LWP::ConnCache::MaxKeepAliveRequests;
 use Switch;
 use POSIX;
@@ -107,6 +105,7 @@ print $AMI
       "Username: admin\r\n" .
       "Secret: admin\r\n" .
       "\r\n";
+#
 #################################################################
 #
 ############### LWP #############################################
@@ -122,6 +121,7 @@ print $AMI
 #
 ########## SYSTEM PROMPTS #######################################
 our %SYS=(0=>'CARD CANCELED',1=>'ACTIVE',2=>'NEW CARD. WAIT FOR REGISTRATION',3=>'WAITING CONFIRMATION',4=>'CARD RESERVED',5=>'CARD EXPIRED',6=>'CARD SUSPENDED FOR UNDERPAYMENT',9=>'RESALE');
+our %reason=(0 => 'no such extension or number',1 => 'no answer',2 => 'local ring',3 => 'ring',4 => 'answered',5 => 'busy',6 => 'off hook',7 => 'line off hook',8 => 'circuits busy');
 #
 ########## LISTEN FOREVER #######################################
 # Multiplexing sockets handlers
@@ -258,7 +258,7 @@ switch ($REQUEST_OPTION){
 ##if request in 'query' format
 		if ($REQUEST->{query}){
 			our %Q=();
-			my @QUERY=split(' ',$REQUEST->{query});
+			my @QUERY=split(';',$REQUEST->{query});
 				foreach my $pair(@QUERY){
 					my  ($key,$val)=split('=',$pair);
 					$Q{$key}="$val";#All variables from request
@@ -583,34 +583,43 @@ $msrn=~s/\+//;#supress \+ from xml response
 	if (($msrn=~/\d{7,15}/)and(!$offline)){
 #print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[select get_text($Q{imsi},'spool','wait',"$msrn:$Q{USSD_DEST}")],2)}[0]);
 print $new_sock response('auth_callback_sig','OK',$Q{transactionid},"Please wait... Calling to $Q{USSD_DEST}");
-# Call SPOOL	
-		my $SPOOL_RESULT;	
-									my $AMI_Action=
-									"Action: Originate\r\n".
-                                    "Channel: $Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}\r\n".
-                                    "Context: a2billing-callback\r\n".
-                                    "Exten: $Q{USSD_DEST}\r\n".
-                                    "CallerID: $Q{USSD_DEST}\r\n".
-                                    "CallerIDName: <$Q{USSD_DEST}>\r\n".
-                                    "Priority: 1\r\n".
-                                    "ActionID: $uniqueid\r\n".
-                                    "Async: 1\r\n".
-                                    "Account: $Q{SUB_CN}\r\n".
-                                    "Variable: CALLED=$msrn,CALLING=$Q{USSD_DEST},CBID=$uniqueid,LEG=$Q{SUB_CN}\r\n".
-                                    "\r\n";
-print $AMI $AMI_Action;
+## Call SPOOL	
+my $AMI_Action=
+"Action: Originate\r\n".
+"Channel: $Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}\r\n".
+"Context: a2billing-callback\r\n".
+"Exten: $Q{USSD_DEST}\r\n".
+"CallerID: $Q{USSD_DEST}\r\n".
+"CallerIDName: <$Q{USSD_DEST}>\r\n".
+"Priority: 1\r\n".
+"ActionID: $uniqueid\r\n".
+"Async: 1\r\n".
+"Account: $Q{SUB_CN}\r\n".
+"Variable: CALLED=$msrn,CALLING=$Q{USSD_DEST},CBID=$uniqueid,LEG=$Q{SUB_CN}\r\n".
+"\r\n";
+## Check SPOOL
+print $AMI $AMI_Action;#print to AMI socket
+my ($line,$key,$val,@array_line,$a,%q);
+recv($AMI,$line,500,0);#read socket
+@array_line=split('\r',$line);#split to lines
+foreach $a(@array_line){#foreach line
+($key,$val)=split(': ',$a);#split key val
+$q{Response}=$val if $key=~/Response/;#if response
+$q{ActionID}=$val if $key=~/ActionID/;#if actionid
+$q{Message}=$val if $key=~/Message/;#if message
+}#foreach line
 #			
-&response('LOG','SPOOL-AMI-RETURN',"$SPOOL_RESULT->{'Message'} $SPOOL_RESULT->{'GOOD'} $SPOOL_RESULT->{'Response'} $AMI_Action");			
-SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}","$Q{USSD_DEST}","$Q{SUB_CN}","$SPOOL_RESULT->{'Response'}")],2);	
-		if($SPOOL_RESULT->{'GOOD'} eq '1'){
+&response('LOG','SPOOL-AMI-RETURN',"$q{Response},$q{ActionID},$q{Message}");			
+		if($q{Response} eq 'Success'){
+		my $SPOOL_result=SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}","$Q{USSD_DEST}","$Q{SUB_CN}","CB $q{Response}")],2);	
 #			my $rate=${SQL(qq[SELECT round(get_rate($msrn,$Q{USSD_DEST}),2)],2)}[0];
-			&response('LOG','SPOOL-GET-SPOOL',$SPOOL_RESULT->{'GOOD'});
+			&response('LOG','SPOOL-GET-SPOOL',"$SPOOL_result");
 			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'SPOOL',"$uniqueid");
-			return 'SPOOL SUCCESS 0';
+			return "SPOOL $q{Response} 0";
 		}else{
 			print $new_sock &response('auth_callback_sig','ERROR','#'.__LINE__.' CANT SPOOL CALL');
 			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'ERROR','CANT SPOOL CALL');
-			return 'SPOOL ERROR -1';
+			return "SPOOL $q{Response} -1";
 			}#else CANT SPOOL
 	}#if msrn and dest
 	else{#else not msrn and dest
@@ -859,7 +868,7 @@ switch ($Q{code}){
 			print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$result");
 		}#case get_stat
 	case 'send_ussd' {#SEND_USSD
-		$result=&LWP('send_ussd',${SQL(qq[SELECT get_uri(NULL,NULL,NULL,$Q{msisdn},$Q{code},$Q{sub_code},NULL)],2)}[0]);
+		$result=&LWP('send_ussd',${SQL(qq[SELECT get_uri(NULL,NULL,NULL,"$Q{msisdn}","$Q{code}","$Q{sub_code}",NULL)],2)}[0]);
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$Q{msisdn} $result");
 		}#case send_ussd
 	case 'get_session_time' {#Get max session time
@@ -870,6 +879,10 @@ switch ($Q{code}){
 	case 'set_debug'{#set debug
 		$debug=$Q{sub_code};
 		$result=$debug;
+		}#case set debug
+	case 'cb_status'{#set status of callback
+		$result=${SQL(qq[UPDATE cc_callback_spool set status="$Q{options}",manager_result="$Q{options1}" WHERE uniqueid="$Q{sub_code}"],2)}[0];
+		print $new_sock "$Q{sub_code} $result";
 		}#case set debug
 	else {
 		&response('LOG','RC-API-CMD-UNKNOWN',"$Q{code}");

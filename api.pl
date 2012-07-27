@@ -70,7 +70,7 @@ exit;#end processing
 else{#if general request
 if ((!$PARAM{xml})&&(!$PARAM{POSTDATA})){#if not xml payments
 &logg("SEND QUERY @QUERY");
-print $sock qq[<?xml version="1.0" encoding="UTF-8"?><SIG_QUERY><authentication><key>897234jhdln328sLUV</key><host>$remote_host</host></authentication><query>@QUERY</query></SIG_QUERY>\r\n];}
+print $sock qq[<?xml version="1.0" encoding="UTF-8"?><SIG_QUERY><authentication><key>897234jhdln328sLUV</key><host>$remote_host</host></authentication><query>$qr</query></SIG_QUERY>\r\n];}
 else{#else if xml payments
 &logg("SEND QUERY $PARAM{xml} $PARAM{POSTDATA}");
 print $sock qq[<?xml version="1.0" encoding="UTF-8"?><SIG_QUERY><authentication><key>897234jhdln328sLUV</key><host>$remote_host</host></authentication>$PARAM{xml}</SIG_QUERY>\r\n] if $PARAM{xml};
