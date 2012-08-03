@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 270712rev.48.0 HFX-654 HFX-261 HFX-600 AMISELF-THREAD';
+my $REV='API Server 030812rev.50.2 HFX-654 HFX-261 HFX-600 HFX-620 AMISELF-THREAD SMS';
 ##
 #################################################################
 ## 
@@ -320,18 +320,12 @@ switch ($REQUEST_OPTION){
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$USSD $ERROR");
 		return $USSD;
 	}#ussd
-	case 'SIG_SendSMS_MO' {
+	case /SIG_SendSMS/ {
 		my $SMS=$REQUEST->{SMS_Response}{REQUEST_STATUS};
 		our $ERROR=$REQUEST->{Error_Message};
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$SMS $ERROR");
 		return "$ERROR$SMS";
 	}#sms
-	case 'SIG_SendSMS_MT' {
-		my $SMS=$REQUEST->{SMS_Response}{REQUEST_STATUS};
-		our $ERROR=$REQUEST->{Error_Message};
-		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$SMS $ERROR");
-		return "$ERROR$SMS";
-	}#sms MT
 	case /SIG_SendAgent/ {
 		my $USSD=$REQUEST->{RESALE_Response}{RESPONSE};
 		our $ERROR=$REQUEST->{Error_Message};
@@ -520,8 +514,8 @@ if ($Q{SUB_ID}>0){#if found subscriber
 			$Q{msisdn}='+'.$Q{msisdn} if $Q{msisdn}!~/^(\+)(\d{7,15})$/;#temp for old format
 			my $UPDATE_result=${SQL(qq[SELECT set_country($Q{imsi},$Q{mcc},$Q{mnc},"$Q{msisdn}")],2)}[0];
 			if ($UPDATE_result){#if contry change
-my $TRACK_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',"$Q{imsi}",NULL,"$Q{msisdn}",'mcc_new','ruimtools',NULL)],2)}[0]);
-	$TRACK_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',NULL,NULL,"$Q{msisdn}",'get_ussd_codes','ruimtools',NULL)],2)}[0]);
+my $TRACK_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi}",NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
+	$TRACK_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri2('get_ussd_codes',NULL,NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
 				&response('LOG','MAIN-LU-HISTORY-RETURN',"$TRACK_result");
 			}#if country change
 			print $new_sock &response('LU_CDR','OK',"$Q{SUB_ID}",'1');
@@ -575,7 +569,7 @@ $Q{USSD_DEST}=$2;
 &response('LOGDB','SPOOL',"$Q{transactionid}","$Q{imsi}",'CALL',"$msisdn to $Q{USSD_DEST}");
 #
 if ($Q{USSD_DEST}){#if correct destination number
-my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,'SIG_GetMSRN',NULL,NULL)],2)}[0]);
+my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
 my $offline=1 if $msrn eq 'OFFLINE';
 $msrn=~s/\+//;#supress \+ from xml response
 &response('LOG','SPOOL-GET-MSRN-RESULT',$msrn);
@@ -617,8 +611,9 @@ $q{Message}=$val if $key=~/Message/;#if message
 			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'SPOOL',"$uniqueid");
 			return "SPOOL $q{Response} 0";
 		}else{
-			print $new_sock &response('auth_callback_sig','ERROR','#'.__LINE__.' CANT SPOOL CALL');
-			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'ERROR','CANT SPOOL CALL');
+			print $new_sock &response('auth_callback_sig','ERROR','#'.__LINE__.'UNKNOWN SPOOL RESULT');
+			my $SPOOL_result=SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}","$Q{USSD_DEST}","$Q{SUB_CN}","Unknown")],2);
+			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'WARN','UNKNOWN SPOOL RESULT');
 			return "SPOOL $q{Response} -1";
 			}#else CANT SPOOL
 	}#if msrn and dest
@@ -707,7 +702,7 @@ switch ($Q{USSD_CODE}){
 	case "126"{#RATES request
 		&response('LOG','SIG-USSD-RATES',"$Q{USSD_CODE} $Q{USSD_DEST}");
 		&response('LOGDB','USSD',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST}");
-		my $msrn=LWP(${SQL(qq[SELECT get_uri('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL,NULL)],2)}[0]);
+		my $msrn=LWP(${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
 		$Q{USSD_CODE}=~/(.?)(\d{12})/;
 		my $dest=$2;
 		my $rate=${SQL("SELECT round(get_rate($msrn,$dest),2)",2)}[0];
@@ -724,7 +719,7 @@ switch ($Q{USSD_CODE}){
 				 my $CFU_number=$2;
 				 my $SQL=qq[SELECT get_cfu_code($Q{imsi},"$CFU_number")];
 					my $CODE=${SQL("$SQL",2)}[0];
-$CODE=LWP('SIG_SendSMS_MO',${SQL(qq[SELECT get_uri('SIG_SendSMSMO',NULL,"+$CFU_number",'447700079964','SIG_SendSMS_MO','447700079964',"$CODE")],2)}[0]) if $CODE=~/\d{5}/;
+$CODE=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_number","$Q{msisdn}",'ruimtools',"$CODE")],2)}[0]) if $CODE=~/\d{5}/;
 					$CFU_number='NULL' if $CODE!~/0|1|INUSE/;
 					$SQL=qq[SELECT get_cfu_text("$Q{imsi}","$CODE",$CFU_number)];
 					my $TEXT_result=${SQL("$SQL",2)}[0];
@@ -747,7 +742,7 @@ $CODE=LWP('SIG_SendSMS_MO',${SQL(qq[SELECT get_uri('SIG_SendSMSMO',NULL,"+$CFU_n
 		&response('LOG','SIG-COUNTRY-RATES-REQUEST',"$Q{USSD_CODE}");
 		&response('LOGDB','USSD',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE}],1)}[0]);
-		my $USSD_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',"$Q{imsi}",NULL,"$Q{msisdn}",'mcc_new','ruimtools',NULL)],2)}[0]);
+		my $USSD_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi}",NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
 		#my $SQL_result=&LU_H(1);
 		return 'USSD $SQL_result';
 	}#case 128
@@ -755,7 +750,7 @@ $CODE=LWP('SIG_SendSMS_MO',${SQL(qq[SELECT get_uri('SIG_SendSMSMO',NULL,"+$CFU_n
 		&response('LOG','SIG-USSD-CODES-REQUEST',"$Q{USSD_CODE}");
 		&response('LOGDB','USSD',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE}],1)}[0]);
-		my $SMSMT_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',NULL,NULL,"$Q{msisdn}",'get_ussd_codes','ruimtools',NULL)],2)}[0]);
+		my $SMSMT_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('get_ussd_codes',NULL,NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
 		return "USSD $SMSMT_result";
 	}#case 129
 	
@@ -838,7 +833,7 @@ switch ($Q{code}){
 		$result='0';
 	}#case ping
 	case 'get_msrn' {#GET_MSRN
-		my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri(NULL,"$Q{imsi}",NULL,NULL,'SIG_GetMSRN',NULL,NULL)],2)}[0]);
+		my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
 	#	my $bill_result=${SQL(qq[select bill_agent("$Q{agent}",'SIG_GetMSRN'],2)}[0];
 		if(!$Q{CFU}){#agents subscriber
 		&response('LOGDB',"$Q{code}","$Q{transactionid}","$Q{imsi}",'OK',"");
@@ -849,7 +844,7 @@ switch ($Q{code}){
 			else{#if CFU subscriber
 		&response('LOGDB',"$Q{code}","$Q{transactionid}","$Q{imsi}",'OK',"CFU:$Q{login}");
 		my $agent_TID="$Q{transactionid}";
-	my $limit=LWP('get_session_time',${SQL(qq[SELECT get_uri(NULL,NULL,NULL,$Q{msrn},'get_session_time',$Q{SUB_ID},NULL)],2)}[0]) if $Q{SUB_OPTIONS}=~/CFU/;
+	my $limit=LWP('get_session_time',${SQL(qq[SELECT get_uri2('get_session_time',NULL,NULL,$Q{msrn},$Q{SUB_ID},NULL)],2)}[0]) if $Q{SUB_OPTIONS}=~/CFU/;
 		print $new_sock &response('rc_api_cmd','OK',$agent_TID,"$msrn","$limit") if $Q{options} ne 'cleartext';
 		$msrn=~s/\+// if $Q{options} eq 'cleartext';#cleartext for ${EXTEN} usage
 		print $new_sock "$agent_TID:$msrn:$limit" if $Q{options} eq 'cleartext';
@@ -868,11 +863,11 @@ switch ($Q{code}){
 			print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$result");
 		}#case get_stat
 	case 'send_ussd' {#SEND_USSD
-		$result=&LWP('send_ussd',${SQL(qq[SELECT get_uri(NULL,NULL,NULL,"$Q{msisdn}","$Q{code}","$Q{sub_code}",NULL)],2)}[0]);
+		$result=&LWP('send_ussd',${SQL(qq[SELECT get_uri2("$Q{code}",NULL,NULL,"$Q{msisdn}","$Q{sub_code}",NULL)],2)}[0]);
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$Q{msisdn} $result");
 		}#case send_ussd
 	case 'get_session_time' {#Get max session time
-		$result=&LWP('get_session_time',${SQL(qq[select get_uri(NULL,$Q{imsi},NULL,$Q{msisdn},'get_session_time',NULL,NULL)],2)}[0]);
+		$result=&LWP('get_session_time',${SQL(qq[select get_uri2('get_session_time',$Q{imsi},NULL,$Q{msisdn},NULL,NULL)],2)}[0]);
 		print $new_sock $result if $Q{options} eq 'cleartext';
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$result") if $Q{options} ne 'cleartext';;
 		}#case get_session_time
@@ -893,7 +888,7 @@ switch ($Q{code}){
 }#switch code
 		&response('LOG','RC-API-CMD',"$Q{code} $result");
 		&response('LOGDB',"$Q{code}","$Q{transactionid}","$Q{imsi}",'OK',"RESULT $result");
-		return 'CMD $result';
+		return "CMD $result";
 
 }##### END sub RC_API_CMD ########################################
 #
@@ -910,7 +905,7 @@ $ussd_code='UD' if $Q{USSD_CODE}!~/111|112|LU/;
 $ussd_code=$Q{request_type} if $Q{request_type}=~/CDR|POSTDATA|DataAUTH|SMS/;
 #if (($agent_key)&&($agent_addr)){#if found key and address
 		&response('LOG',"AGENT-REQUEST-$ussd_code","$Q{SUB_AGENT_ID}");
-$LWP_result=LWP("SIG_SendAgent_$ussd_code",${SQL(qq[SELECT get_uri(NULL,"$Q{imsi}","$Q{SUB_AGENT_ADDR}",NULL,"SIG_SendAgent_$ussd_code","$Q{USSD_CODE}","$Q{USSD_DEST}")],2)}[0]);
+$LWP_result=LWP("SIG_SendAgent_$ussd_code",${SQL(qq[SELECT get_uri2("SIG_SendAgent_$ussd_code","$Q{imsi}","$Q{SUB_AGENT_ADDR}",NULL,"$Q{USSD_CODE}","$Q{USSD_DEST}")],2)}[0]);
 		my $bill_result=${SQL(qq[select bill_agent($Q{SUB_AGENT_ID},"SIG_SendAgent_$ussd_code")],2)}[0];
 		&response('LOG',"AGENT-RESPONSE-$ussd_code","$LWP_result");
 return $LWP_result;
@@ -998,77 +993,68 @@ else{#else if auth
 }#end esle if auth
 	&response('LOGDB',"PAYMNT","$REQUEST->{payment}{id}","$CARD_NUMBER",'RSP',"$SQL_T_result @TR");
 	print $new_sock "200 $SQL_T_result";
-	my $SMSMT_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',"$CARD_NUMBER",NULL,NULL,"pmnt_$SQL_T_result","$CARD_NUMBER","$REQUEST->{payment}{id}")],2)}[0]);# we cant send this sms with no auth because dont known whom
+	my $SMSMT_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri2("pmnt_$SQL_T_result","$CARD_NUMBER",NULL,NULL,"$CARD_NUMBER","$REQUEST->{payment}{id}")],2)}[0]);# we cant send this sms with no auth because dont known whom
 	return $SQL_T_result;
 }# END sub PAYMNT ##################################################################
 #
-## SMS section ##########################################################
-#########################################################################
-### sub SMS #############################################################
+########################### SMS section ############################################
+### sub SMS ########################################################################
 sub SMS{
 use vars qw(%Q);#load global array
-my ($flag,$sms_opt,$sms_to,$sms_text,$type,$SQL);#just declare
-$flag=$Q{USSD_DEST};#sms page and number
-$sms_opt=$Q{USSD_EXT};#sms text
-our $sms_result;#just declare
+my ($sms_result,$sms_opt,$sms_to,$sms_text,$sms_long_text,$type,$SQL);#just declare
 #
 &response('LOG','SMS-REQ',"$Q{USSD_DEST} $Q{USSD_EXT}") if $debug>=3;
-$flag=~/(\d{1})(\d{1})/;#find page number and pages amount
-my ($page,$num_page)=($1,$2);
+$Q{USSD_DEST}=~/(\d{1})(\d{1})(\d{1})/;#page number, pages amount, message number
+my ($page,$pg_num,$seq)=($1,$2,$3);
 #
-if ($page eq '1'){#if first page
-	$sms_opt=~/^(\D|00)?([1-9]\d{7,15})\*(\w+)#/;#parse msisdn
-	$sms_to='+'.$2;#temp for old format
-	$sms_text=$3;
-}#if first page
-else{#else next page
-	$sms_to="multipage";
-	$sms_opt=~/(\w+)#/;#cut '#' symbol
-	$sms_text=$1;
-}#else next page
+return 4 if !$seq;#new format from 01.08
+#
+$Q{USSD_EXT}=~/^(\D|00)?([1-9]\d{7,15})\*(\w+)#/;#parse msisdn
+$sms_to='+'.$2;#intern format
+$sms_long_text=$3;#sms text
 #
 &response('LOG','SMS-REQ',"$flag,$sms_to");
-my $sql_erorr_update_result=${SQL(qq[UPDATE cc_sms set status="-1" where src="$Q{msisdn}" and flag="$flag" and dst="$sms_to" and status=0 and imsi=$Q{imsi}],2)}[0];#to avoid double sms HFX-970
+my $sql_erorr_update_result=${SQL(qq[UPDATE cc_sms set status="-1" where src="$Q{msisdn}" and flag="$page$pg_num" and seq="$seq" and dst="$sms_to" and status=0 and imsi=$Q{imsi}],2)}[0];#to avoid double sms HFX-970
 &response('LOG','SMS-REWRITE',"$sql_erorr_update_result");
-$SQL=qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`text`,`inner_tid`,`imsi`) values ("$Q{transactionid}","$Q{msisdn}","$sms_to","$flag","$sms_text","$INNER_TID","$Q{imsi}")];#store page to db
-my $sql_result=&SQL($SQL);
-&response('LOG','SMS-REQ',"$sql_result");
+#store page to db
+my $INSERT_result=${SQL(qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`seq`,`text`,`inner_tid`,`imsi`) values ("$Q{transactionid}","$Q{msisdn}","$sms_to","$page$pg_num","$seq","$sms_long_text","$INNER_TID","$Q{imsi}")],2)}[0];
+&response('LOG','SMS-REQ',"$INSERT_result");
 #if insert ok
-	if ($sql_result>0){#if insert ok
-#		$flag=~/(\d{1})(\d{1})/;# deprecated to 955
+	if ($INSERT_result>0){#if insert ok
 #if num page
-			if ($num_page eq $page){#if only one or last page - prepare sending
-				($sms_text,$sms_to,$type)=split('::',${SQL(qq[SELECT get_sms_text("$Q{msisdn}",$num_page,$Q{imsi})],2)}[0]);#get text dest and type
-#if return content		
-				if (($sms_text) and ($sms_to=~/^\+([1-9]\d{7,15})/)){#if return content
-#(!)# Here we need code to split messages by 168 symbols RFC&TODO#1
-				&response('LOG','SMS-ENC-RESULT',"$sms_text");
-				$sms_text=uri_escape($sms_text);
-				my $sms_from=$Q{msisdn};#set from recipient must be in international format
-					&response('LOG','SMS-TEXT-ENC-RESULT',"$sms_text");
-					&response('LOG','SMS-SEND-PARAM',"$sms_to,'ruimtools',$sms_text,$sms_from");
+		if ($pg_num eq $page){#if only one or last page - prepare sending
+			($sms_long_text,$type,$sms_from)=split('::',${SQL(qq[SELECT get_sms_text2("$Q{msisdn}","$sms_to",$Q{imsi},$seq)],2)}[0]);#get text
+			$sms_from=~s/\+//;#'+' is deprecated by C9 standart		
+				if ($sms_long_text){#if return content
+					my @multi_sms=($sms_long_text=~/.{1,168}/gs);#divide long text to 168 parts
+					foreach $sms_text (@multi_sms){#foreach parth one sms
+						&response('LOG','SMS-ENC-RESULT',"$sms_text") if $debug>3;
+						$sms_text=uri_escape($sms_text);#url encode
+						&response('LOG','SMS-TEXT-ENC-RESULT',"$sms_text") if $debug>=3;
+						&response('LOG','SMS-SEND-PARAM',"$sms_from,$sms_to") if $debug>3;
 #internal subscriber
-						if ($type eq 'IN'){#internal subscriber
-							&response('LOG','SMS-REQ',"INTERNAL");
-							$Q{msisdn}=~s/\+//;#by C9 standart in SMS_MT '+' deprecated
-		$sms_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri('SIG_SendSMSMT',NULL,"$sms_to","$Q{msisdn}",'SIG_SendSMS_MT',"$Q{msisdn}","$sms_text")],2)}[0]);#send message
-						}#if internal
-						elsif($type eq 'OUT'){#external subscriber
-							&response('LOG','SMS-REQ',"EXTERNAL");
-		$sms_result=LWP('SIG_SendSMS_MO',${SQL(qq[SELECT get_uri('SIG_SendSMSMO',NULL,"$sms_to","$Q{msisdn}",'SIG_SendSMS_MO',"$Q{msisdn}","$sms_text")],2)}[0]);#send message
+							if ($type eq 'IN'){#internal subscriber
+								&response('LOG','SMS-REQ',"INTERNAL");								
+#MSG_CODE, IMSI_, DEST_, MSN_, OPT_1, OPT_2
+$sms_result=LWP('SIG_SendSMS_MT',${SQL(qq[SELECT get_uri2('SIG_SendSMSMT',NULL,"$sms_to","$sms_from",NULL,"$sms_text")],2)}[0]);#send sms mt
+								}#if internal
+#external subscriber
+							elsif($type eq 'OUT'){
+								&response('LOG','SMS-REQ',"EXTERNAL");
+$sms_result=LWP('SIG_SendSMS_MO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"$sms_to","$Q{msisdn}","$sms_from","$sms_text")],2)}[0]);#send sms mo
 						}#else external
-					$SQL=qq[UPDATE cc_sms set status="$sms_result" where src="$Q{msisdn}" and flag like "%$num_page" and status=0 and imsi=$Q{imsi}];
+					}#foreach multisms
+$SQL=qq[UPDATE cc_sms set status="$sms_result" where src="$Q{msisdn}" and dst="$sms_to" and seq="$seq" and status=0 and imsi=$Q{imsi}];
 					my $sql_update_result=&SQL($SQL);#update status to sending result
-					return $sms_result;
-#if return content		
+					return $sms_result;		
 				}#if return content
 				else{#mark sms as error
-my $sql_update_result=${SQL(qq[UPDATE cc_sms set status="-1" where src="$Q{msisdn}" and flag like "%$num_page" and status=0 and imsi=$Q{imsi}],2)}[0];
+my $sql_update_result=${SQL(qq[UPDATE cc_sms set status="-1" where src="$Q{msisdn}" and dst="$sms_to" and seq="$seq" and status=0 and imsi=$Q{imsi}],2)}[0];
 return 3;#if cant get text set status to -1
 					}#else mark sms
 				}#if num_page==page
 				else{#else multipage
-					return 2;#multi page send uusd reply 'Wait...'
+					return 2;#multi page send ussd reply 'Wait...'
 					}#end else multipage
 					}#if insert
 				else{#else not insert
