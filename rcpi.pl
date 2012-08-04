@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 030812rev.50.3 HFX-654 HFX-261 HFX-600 HFX-620 AMISELF-THREAD SMS';
+my $REV='API Server 040812rev.51.0 HFX-654 HFX-261 HFX-600 HFX-620 HFX-653 AMISELF-THREAD SMS';
 ##
 #################################################################
 ## 
@@ -650,9 +650,10 @@ switch ($Q{USSD_CODE}){
 		&response('LOG','SIG-USSD-IMEI-REQUEST',"$Q{USSD_DEST}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST}");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"RuimTools registered");
+		if (length($Q{USSD_DEST})==15){
 		my $SQL=qq[UPDATE cc_card set address="$Q{USSD_DEST} $Q{USSD_EXT}" where useralias="$Q{imsi}" or firstname="$Q{imsi}"];
-		my $SQL_result=&SQL($SQL);
-		return "USSD $SQL_result";
+		my $SQL_result=&SQL($SQL);}#if length
+		return "USSD $Q{USSD_DEST}";
 	}#case 110
 ###
 	case "122"{#SMS request
