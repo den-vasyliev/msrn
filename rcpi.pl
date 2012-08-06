@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 040812rev.51.0 HFX-654 HFX-261 HFX-600 HFX-620 HFX-653 AMISELF-THREAD SMS';
+my $REV='API Server 070812rev.54.1 DBI-CACHED BARE-XML';
 ##
 #################################################################
 ## 
@@ -15,6 +15,7 @@ use DBI;
 use Data::Dumper;
 use IO::Socket;
 use XML::Simple;
+use XML::Bare::SAX::Parser;
 use Digest::SHA qw(hmac_sha512_hex);
 use Digest::MD5 qw(md5);
 use URI::Escape;
@@ -32,14 +33,15 @@ no warnings 'once';
 ########## END OF MODULES #######################################
 #
 ########## KEYS #############################################
-system('stty','-echo');
-print STDOUT "Enter login:\n";
-chop(my $LOGIN = <STDIN>);
-print STDOUT "Enter passwd:\n";
-chop(my $PASS = <STDIN>);
-print STDOUT "Enter key:\n";
-chop(our $KEY = <STDIN>);
-system('stty','echo');
+##system('stty','-echo');
+#print STDOUT "Enter login:\n";
+#chop(my $LOGIN = <STDIN>);
+#print STDOUT "Enter passwd:\n";
+#chop(my $PASS = <STDIN>);
+#print STDOUT "Enter key:\n";
+#chop(our $KEY = <STDIN>);
+#system('stty','echo');
+my($LOGIN,$PASS,$KEY)=('msrn','msrn','ruimt00l$');
 ################################################################
 #
 #################################################################
@@ -108,15 +110,8 @@ print $AMI
 #
 #################################################################
 #
-############### LWP #############################################
-#use LWP::ConnCache::MaxKeepAliveRequests;
-#our $lwp = LWP::UserAgent->new;
-#$lwp->conn_cache(
-#    LWP::ConnCache::MaxKeepAliveRequests->new(
-#        total_capacity          => 10,
-#        max_keep_alive_requests => 100,
-#    )
-#);
+############### XML #############################################
+our $xs = XML::Simple->new(ForceArray => 0,KeyAttr    => {});
 #################################################################
 #
 ########## SYSTEM PROMPTS #######################################
@@ -127,13 +122,16 @@ our %reason=(0 => 'no such extension or number',1 => 'no answer',2 => 'local rin
 # Multiplexing sockets handlers
 #################################################################
 #
+our $dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless defined($dbh);#need to be here for threads
 our $sock = new IO::Socket::INET (LocalHost => $HOST,LocalPort => $PORT,Proto => 'tcp',Listen => 32,ReuseAddr => 1,); 
 our $new_sock;
 #
 ####################### MULTITHREADING ##########################
 while ($new_sock = $sock->accept) {#accept incoming connection
+#&response('LOG','THREADS','START');
     async(\&hndl, $new_sock)->detach;#create async thread for socket connection
     close $new_sock;#close socket
+#&response('LOG','THREADS','END');
 }#while accept
 #
 sub hndl{#thread handle
@@ -143,11 +141,11 @@ sub hndl{#thread handle
         	our $INNER_TID;#define inner tid
         	my $thr=threads->tid();
 			my ($s, $usec) = gettimeofday();my $format = "%06d";$usec=sprintf($format,$usec);$INNER_TID=$s.$usec;#create inner tid
-			&response('LOG',"API-SOCKET-OPEN $thr","##################################################");
-			&response('LOG','SOCKET',"OPEN $new_sock");
+			&response('LOG',"API-SOCKET-OPEN $thr $new_sock","##################################################");
+#			&response('LOG','SOCKET',"OPEN $new_sock");
 			main();#call main
-			&response('LOG','SOCKET',"CLOSE $new_sock");
-			&response('LOG',"API-SOCKET-CLOSE $thr","##################################################");
+#			&response('LOG','SOCKET',"CLOSE $new_sock");
+			&response('LOG',"API-SOCKET-CLOSE $thr $new_sock","##################################################");
 			close($new_sock);#close sock
 		}else{#no key - close 
 			$new_sock->close;#close sock if no key
@@ -162,13 +160,10 @@ sub hndl{#thread handle
 #################################################################
 sub main{
 #
-use vars qw($XML_REQUEST $INNER_TID $LOGFILE $new_sock %Q);
-########## CONNECT TO MYSQL #####################################
-our $dbh = DBI->connect('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless defined($dbh);#need to be here for threads
-#################################################################
-$ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;
+use vars qw($XML_REQUEST $INNER_TID $LOGFILE $new_sock %Q $dbh);
+######## create LWP Agent #######################################
+$ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;#for https cert
 our $lwp = LWP::UserAgent->new;
-#$lwp->ssl_opts(verify_hostname =>0);
 #################################################################
 	our %XML_KEYS=&XML_PARSE($XML_REQUEST,'SIG_GetXML');
 	my $qkeys= keys %XML_KEYS;
@@ -182,6 +177,13 @@ our $lwp = LWP::UserAgent->new;
 		$IN_SET=$IN_SET."$XML_KEYS{calllegid}:$XML_KEYS{bytes}:$XML_KEYS{seconds}:$XML_KEYS{mnc}:$XML_KEYS{mcc}:$XML_KEYS{amount}" if $XML_KEYS{calllegid};#DATA
 		$XML_KEYS{transactionid}=$XML_KEYS{SessionID} if $XML_KEYS{SessionID};#DATA
 		$XML_KEYS{imsi}=$XML_KEYS{GlobalIMSI} if $XML_KEYS{SessionID};#DATA
+#
+########## CONNECT TO MYSQL #####################################
+#&response('LOG','MAIN-DB-CONNECT','PREPARE');
+$dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless defined($dbh);#need to be here for threads
+#&response('LOG','MAIN-DB-CONNECT',"OPENED $dbh");
+#################################################################
+#
 		&response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'IN',$IN_SET);#Register IN request
 		#Get action type
 		my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});
@@ -193,15 +195,15 @@ our $lwp = LWP::UserAgent->new;
 	switch ($ACTION_TYPE_RESULT){#if we understand action
 		case 1 {#Incorrect URL
 			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT URL VARIABLES');
-			&response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'ERROR','INCORRECT URL VARIABLES');
+			&response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'ERROR','INCORRECT URL VARIABLES');return;
 		}#case 1
 		case 2 {#Incorrect type
 			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT ACTIONS TYPE');
-			&response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'ERROR','INCORRECT ACTIONS TYPE');
+			&response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'ERROR','INCORRECT ACTIONS TYPE');return;
 		}#case 2
 		case 3 {#Not found at all
 			&response('LOG','MAIN-GET-TYPE','NOT FOUND');
-			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT URI')}
+			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT URI');return;}
 	else {#else switch ACTION TYPE RESULT
 		use vars qw($subref);
 		if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_GRP_ID}!=1)){#if sub options related to agent
@@ -216,9 +218,9 @@ our $lwp = LWP::UserAgent->new;
 		};warn $@ if $@;  &response('LOG',"MAIN-ACTION-SUBREF","ERROR $ACTION_TYPE_RESULT") if $@;
 		use vars qw($ACTION_RESULT);
 			if($ACTION_RESULT){#action return result
-				&response('LOG',"MAIN-ACTION-RESULT-$ACTION_TYPE_RESULT","$ACTION_RESULT");
+				&response('LOG',"MAIN-ACTION-RESULT-$ACTION_TYPE_RESULT","$ACTION_RESULT");return;
 			}#if ACTION RESULT
-			else{&response('LOG',"MAIN-ACTION-RESULT-$ACTION_TYPE_RESULT",'NO ACTION_RESULT');
+			else{&response('LOG',"MAIN-ACTION-RESULT-$ACTION_TYPE_RESULT",'NO ACTION_RESULT');return;
 			}#no result returned
 		}#else switch ACTION TYPE RESULT
 ##
@@ -228,6 +230,7 @@ else{#else if keys
 	&response('LOGDB',"UNKNOWN REQUEST",0,0,'IN',"$XML_REQUEST");
 	&response('LOG','MAIN-XML-PARSE-KEYS',$qkeys);
 	print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT XML KEYS',0);
+	return;
 }#else if keys
 }########## END sub main ########################################
 #
@@ -242,11 +245,17 @@ my $REQUEST_LINE=$_[0];
 my $REQUEST_OPTION=$_[1];
 my @QUERY='';
 #
+my $backend="XML::Bare::SAX::Parser";
+local $ENV{XML_SIMPLE_PREFERRED_PARSER}="$backend";
+&response('LOG','XML_PARSE',"IN $backend");
 eval {#error exceprion
-our $REQUEST=XML::Simple->new()->XMLin($REQUEST_LINE); 
+use vars qw($xs);
+our $REQUEST=$xs->XMLin($REQUEST_LINE);
+#our $REQUEST=XML::Simple->new()->XMLin($REQUEST_LINE); 
 our $DUMPER=Dumper (XML::Simple->new()->XMLin($REQUEST_LINE)) if $debug>3;
 };warn $@ if $@; return "XML not well-formed" if $@;
 #
+&response('LOG','XML_PARSE','OUT');
 use vars qw($REQUEST $DUMPER);
 &response('LOG',"XML-PARSE-REQUEST-$REQUEST_OPTION","$REQUEST_LINE") if $debug>3;
 #
@@ -456,7 +465,7 @@ my $mcs=$s.$usec;
 $timer=int($mcs-$INNER_TID) if $INNER_TID;
 my $now = localtime;
 #
-open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log');
+#open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log');
 open(STDERR, ">>", '/opt/ruimtools/log/errlog.log');
 #
 my ($ACTION_TYPE,$RESPONSE_TYPE,$RONE,$RSEC,$RTHI,$RFOUR)=@_;
