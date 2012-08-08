@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 080812rev.54.5';
+my $REV='API Server 080812rev.54.7';
 ##
 #################################################################
 ## 
@@ -78,7 +78,7 @@ sub phoenix {
 # *All transactions will always store in DB
 # **Default is 2
 #
-if(@ARGV){our $debug=$ARGV[0]}else{use vars qw($debug );$debug=2}
+if(@ARGV){our $debug=$ARGV[0]}else{use vars qw($debug );$debug=1}
 #################################################################
 #
 ########## LOG FILE #############################################
@@ -131,7 +131,7 @@ our %reason=(0 => 'no such extension or number',1 => 'no answer',2 => 'local rin
 our $sock = new IO::Socket::INET (LocalHost => $HOST,LocalPort => $PORT,Proto => 'tcp',Listen => 32,ReuseAddr => 1,); 
 our $new_sock;
 #################################################################
-&response('LOG','API',"$REV Ready at $$ deb $debug $rc actions was fetched");
+&response('LOG','API',"$REV Ready at $$ debug level $debug $rc actions was cached");
 ####################### MULTITHREADING ##########################
 while ($new_sock = $sock->accept) {#accept incoming connection
     async(\&hndl, $new_sock)->detach;#create async thread for socket connection
@@ -170,9 +170,8 @@ my $qkeys= keys %XML_KEYS;
 		$XML_KEYS{imsi}=$XML_KEYS{GlobalIMSI} if $XML_KEYS{SessionID};#DATA
 ## CACHED MYSQL CONNECTIONS ##
 $dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);#need to be here for threads
-&response('LOG','MAIN-DBI-START',$dbh);
+&response('LOG','MAIN-DBI-START',$dbh) if $debug>2;
 ##
-#
 		my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});#get action type
 #
 		eval {#save subref
@@ -196,7 +195,7 @@ $dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);#need to be here for t
 			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT URI');return;}
 	else {#else switch ACTION TYPE RESULT
 		use vars qw($subref);
-		if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_GRP_ID}!=1)&&($Q{SUB_OPTIONS})){#if sub options related to agent
+		if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_GRP_ID}!=1)&&($Q{SUB_OPTIONS})){#if agent sub
 		&response('LOG','MAIN-ACTION-TYPE-AGENT',"FOUND $Q{SUB_AGENT_ID}");
 		my $AGENT_response=agent();
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$AGENT_response");
@@ -397,8 +396,8 @@ my $SQL=qq[$_[0]];
 my $flag=qq[$_[1]];
 $SQL=qq[SELECT get_text(].$SQL.qq[,NULL)] if $flag eq '1';
 my $now = localtime;
-print $LOGFILE "[$now]-[$INNER_TID]-[$timer]-[API-SQL-MYSQL]: $SQL\n" if (($debug>2)and($SQL!~/AES_DECRYPT/)); #DONT CALL VIA &RESPONSE
-print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>3;
+#print $LOGFILE "[$now]-[$INNER_TID]-[$timer]-[API-SQL-MYSQL]: $SQL\n" if (($debug>2)and($SQL!~/AES_DECRYPT/)); #DONT CALL VIA &RESPONSE
+#print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>3;
 #
 my ($rc, $sth);
 our (@result, $new_id);
@@ -678,24 +677,16 @@ switch ($Q{USSD_CODE}){
 					return 'USSD -1';
 				}#else
 	}#case 123
-###
-	case "124"{#balance request
-		&response('LOG','SIG-USSD-BALANCE-REQUEST',"$Q{USSD_CODE}");
-		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},'Please use *123# instead.');
-		return 'USSD 0';
-	}#case 124
-###
 	case "126"{#RATES request
 		&response('LOG','SIG-USSD-RATES',"$Q{USSD_CODE} $Q{USSD_DEST}");
-		&response('LOGDB','USSD',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST}");
-		my $msrn=LWP(${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
-		$Q{USSD_CODE}=~/(.?)(\d{12})/;
+		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST}");
+		my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
+		$Q{USSD_DEST}=~/(.?)(\d{12})/;
 		my $dest=$2;
-		my $rate=${SQL("SELECT round(get_rate($msrn,$dest),2)",2)}[0];
+		my $rate=${SQL(qq[SELECT round(get_rate($msrn,$dest),2)],2)}[0] if $msrn=~/^(\+)?([1-9]\d{7,15})$/;
 		&response('LOG','SIG-USSD-RATES-RETURN',"$rate");
-		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Rate to $Q{USSD_DEST} is \$ $rate");
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Rate to $Q{USSD_DEST} is \$ $rate") if $rate=~/\d/;
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Sorry, number offline") if $msrn=~/OFFLINE/;
 		return "USSD 0";
 	}#case 126
 ###
@@ -727,7 +718,7 @@ $CODE=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_n
 ###
 	case "128"{#country rates request
 		&response('LOG','SIG-COUNTRY-RATES-REQUEST',"$Q{USSD_CODE}");
-		&response('LOGDB','USSD',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
+		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE}],1)}[0]);
 		my $USSD_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi}",NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
 		#my $SQL_result=&LU_H(1);
@@ -735,7 +726,7 @@ $CODE=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_n
 	}#case 128
 	case "129"{#ussd codes request
 		&response('LOG','SIG-USSD-CODES-REQUEST',"$Q{USSD_CODE}");
-		&response('LOGDB','USSD',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
+		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE}],1)}[0]);
 		my $SMSMT_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('get_ussd_codes',NULL,NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
 		return "USSD $SMSMT_result";
@@ -744,7 +735,7 @@ $CODE=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_n
 ###
 	else{#switch ussd code
 		&response('LOG','SIG-USSD-UNKNOWN-REQUEST',"$Q{USSD_CODE}");
-		&response('LOGDB','USSD',"$Q{transactionid}","$Q{imsi}",'ERROR',"$Q{USSD_CODE}");
+		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'ERROR',"$Q{USSD_CODE}");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"UNKNOWN USSD REQUEST");
 	return 'USSD -3';
 	}#end else switch ussd code (no code defined)
