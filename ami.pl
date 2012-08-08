@@ -38,7 +38,7 @@ my $input = $_[ARG0];
 $LOGFILE->open(">>/opt/ruimtools/log/ami.log");
 my $sql_result=-1;
 $time=time();
-$sql_result=`/usr/bin/curl -k -f -s -m 10 "http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=cb_status;sub_code=$input->{ActionID};options=$input->{Response};options1=$reason{$input->{Reason}};agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5"`;
+$sql_result=`/usr/bin/curl -k -f -s -m 10 "http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=cb_status;agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5;sub_code=$input->{ActionID};options=$input->{Response};options1=$reason{$input->{Reason}}"`;
 print $LOGFILE "
 [$time]-[SQL]: $sql_result
 [$time]-[EVENT]: $input->{Event}

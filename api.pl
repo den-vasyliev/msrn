@@ -3,7 +3,7 @@
 ####################################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 #
-# API CGI for PROXY SERVER 130712rev.13.0
+# API CGI for PROXY SERVER 080812rev.14.0
 #
 ####################################################
 #
@@ -26,7 +26,7 @@ print "Content-Type: text/xml\n\n";
 #
 eval {#check for 10 sec timeout
 local $SIG{ALRM} = sub { die 'Timed Out'; }; 
-alarm 10;
+alarm 15;
 #
 ## LOGG ######################################
 my $remote_host=$query->remote_host();
@@ -52,7 +52,7 @@ $PARAM{'POSTDATA'}=~s/POSTDATA=/ / if $field eq 'POSTDATA';#for data cdr
 push @QUERY,"$field=$value";#for general request
 $qr=$qr."$field=$value;";#for lab request
     }#foreach value
-push @QUERY,"code=get_stat request_type=rc_api_cmd sub_code=get_card_number transactionid=10" if $field eq 'card_number';#for payments
+$qr=$qr."code=get_stat;request_type=rc_api_cmd;sub_code=get_card_number;transactionid=10;auth_key=7354bff766a40f54d17f6e397cbbba76;" if $field eq 'card_number';#for payments
 }#foreach fiels
 #
 if (($PARAM{imsi} eq '234180000079890')||($PARAM{IMSI} eq '234180000079890')){#if java lab imsi
@@ -69,8 +69,8 @@ exit;#end processing
 }#if perl lab redirect
 else{#if general request
 if ((!$PARAM{xml})&&(!$PARAM{POSTDATA})){#if not xml payments
-&logg("SEND QUERY @QUERY");
-print $sock qq[<?xml version="1.0" encoding="UTF-8"?><SIG_QUERY><authentication><key>897234jhdln328sLUV</key><host>$remote_host</host></authentication><query>$qr</query></SIG_QUERY>\r\n];}
+&logg("SEND QUERY $qr host=$remote_host");
+print $sock $qr."host=".$remote_host."\n";}
 else{#else if xml payments
 &logg("SEND QUERY $PARAM{xml} $PARAM{POSTDATA}");
 print $sock qq[<?xml version="1.0" encoding="UTF-8"?><SIG_QUERY><authentication><key>897234jhdln328sLUV</key><host>$remote_host</host></authentication>$PARAM{xml}</SIG_QUERY>\r\n] if $PARAM{xml};
@@ -83,11 +83,11 @@ my $line;
 while ($line = <$sock>) {#read socket unswer
 &logg("SEND RESPONSE $line");
 print "$line\n";
-if ($line=~m/MOC_response/i){close $sock}#not sure why
+if ($line=~m/MOC_response/i){close $sock}
 }#while read sock
-close or die "close: $!";#close or die
+close;#close or die
 };#eval
 #
 alarm 0; # race condition protection 
-print qq[<?xml version="1.0" ?><Error><Error_Message>TIMED OUT 10 SECONDS</Error_Message></Error>\012] if ( $@ && $@ =~ /Timed Out/ );#timeout
+print qq[<?xml version="1.0" ?><Error><Error_Message>TIMED OUT 15 SECONDS</Error_Message></Error>\012] if ( $@ && $@ =~ /Timed Out/ );#timeout
 ### END ####################################

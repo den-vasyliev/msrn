@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 070812rev.54.1 DBI-CACHED BARE-XML';
+my $REV='API Server 080812rev.54.5';
 ##
 #################################################################
 ## 
@@ -45,8 +45,8 @@ my($LOGIN,$PASS,$KEY)=('msrn','msrn','ruimt00l$');
 ################################################################
 #
 #################################################################
-# MAKE FORK AND CHROOT
-#################################################################
+# 
+####### MAKE FORK AND CHROOT ####################################
 #chroot("/opt/ruimtools/") or die "Couldn't chroot to /opt/ruimtools: $!";
 our $pid = fork;
 exit if $pid;
@@ -57,10 +57,8 @@ $PIDFILE->open(">/opt/ruimtools/tmp/rcpi.pid");
 print $PIDFILE $$;
 $PIDFILE->close();
 ###############################################################
-#
-###############################################################
-# SIG handle to reload configuration kill -HUP
-###############################################################
+# 
+####### SIG handle to reload configuration kill -HUP ##########
 #$SIG{INT} = $SIG{TERM}= 
 $SIG{HUP} = \&phoenix;
 # trap $SIG{PIPE}
@@ -84,9 +82,7 @@ if(@ARGV){our $debug=$ARGV[0]}else{use vars qw($debug );$debug=2}
 #################################################################
 #
 ########## LOG FILE #############################################
-#
 our $LOGFILE = IO::File->new("/opt/ruimtools/log/rcpi.log", "a+");
-#
 ########## CONFIGURATION FOR MAIN SOCKET ########################
 my $HOST='127.0.0.1';
 my $PORT='35001';
@@ -94,11 +90,24 @@ my $AMI_Port='5038';
 #################################################################
 #
 ########## CONNECT TO MYSQL #####################################
-#our $dbh = DBI->connect('DBI:mysql:msrn',$LOGIN,$PASS);
-#die "No auth!" unless defined($dbh);
+our $dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless defined($dbh);#need to be here for threads
+##################################################################
 #
-&response('LOG','API',"$REV Ready at $$ deb $debug");
-#################################################################
+############ ACTION DB CACHE #####################################
+our $rc;
+&db_cache();
+sub db_cache{
+my $SQL=qq[SELECT code,request,response FROM cc_actions];
+my $sth=$dbh->prepare($SQL);
+$rc=$sth->execute;
+our %CACHE;
+my $rows=[];
+	while (my $row = ( shift(@$rows) || shift(@{$rows=$sth->fetchall_arrayref(undef,300)||[]}))){
+		$CACHE{$row->[0]}{'request'}=[split('::',$row->[1])];
+		$CACHE{$row->[0]}{'response'}=[split('::',$row->[2])];
+	}#while
+}#db_cache
+##################################################################
 #
 ############### AMI #############################################
 our $AMI = new IO::Socket::INET (PeerAddr => $HOST,PeerPort => $AMI_Port,Proto => 'tcp','Type' => SOCK_STREAM,'Timeout' => 3);
@@ -107,7 +116,6 @@ print $AMI
       "Username: admin\r\n" .
       "Secret: admin\r\n" .
       "\r\n";
-#
 #################################################################
 #
 ############### XML #############################################
@@ -117,58 +125,41 @@ our $xs = XML::Simple->new(ForceArray => 0,KeyAttr    => {});
 ########## SYSTEM PROMPTS #######################################
 our %SYS=(0=>'CARD CANCELED',1=>'ACTIVE',2=>'NEW CARD. WAIT FOR REGISTRATION',3=>'WAITING CONFIRMATION',4=>'CARD RESERVED',5=>'CARD EXPIRED',6=>'CARD SUSPENDED FOR UNDERPAYMENT',9=>'RESALE');
 our %reason=(0 => 'no such extension or number',1 => 'no answer',2 => 'local ring',3 => 'ring',4 => 'answered',5 => 'busy',6 => 'off hook',7 => 'line off hook',8 => 'circuits busy');
-#
-########## LISTEN FOREVER #######################################
-# Multiplexing sockets handlers
 #################################################################
 #
-our $dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless defined($dbh);#need to be here for threads
+########## LISTEN FOREVER #######################################
 our $sock = new IO::Socket::INET (LocalHost => $HOST,LocalPort => $PORT,Proto => 'tcp',Listen => 32,ReuseAddr => 1,); 
 our $new_sock;
-#
+#################################################################
+&response('LOG','API',"$REV Ready at $$ deb $debug $rc actions was fetched");
 ####################### MULTITHREADING ##########################
 while ($new_sock = $sock->accept) {#accept incoming connection
-#&response('LOG','THREADS','START');
     async(\&hndl, $new_sock)->detach;#create async thread for socket connection
     close $new_sock;#close socket
-#&response('LOG','THREADS','END');
 }#while accept
 #
 sub hndl{#thread handle
 	$new_sock = shift;#next new_sock
-    while (our $XML_REQUEST=<$new_sock>) {#read input
-        if ($XML_REQUEST =~/897234jhdln328sLUV/){#if input from api.pl
+    while (our $REQUEST=<$new_sock>) {#read input
         	our $INNER_TID;#define inner tid
         	my $thr=threads->tid();
 			my ($s, $usec) = gettimeofday();my $format = "%06d";$usec=sprintf($format,$usec);$INNER_TID=$s.$usec;#create inner tid
 			&response('LOG',"API-SOCKET-OPEN $thr $new_sock","##################################################");
-#			&response('LOG','SOCKET',"OPEN $new_sock");
 			main();#call main
-#			&response('LOG','SOCKET',"CLOSE $new_sock");
 			&response('LOG',"API-SOCKET-CLOSE $thr $new_sock","##################################################");
 			close($new_sock);#close sock
-		}else{#no key - close 
-			$new_sock->close;#close sock if no key
-			return -1;
-		}#else close socket
 	}#while read input
 }#hndl
 #################################################################
 #
 ########## MAIN #################################################
-## Main procedure to control all functions
-#################################################################
 sub main{
 #
-use vars qw($XML_REQUEST $INNER_TID $LOGFILE $new_sock %Q $dbh);
-######## create LWP Agent #######################################
-$ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;#for https cert
-our $lwp = LWP::UserAgent->new;
-#################################################################
-	our %XML_KEYS=&XML_PARSE($XML_REQUEST,'SIG_GetXML');
-	my $qkeys= keys %XML_KEYS;
-	&response('LOG','MAIN-XML-PARSE-RETURN',$qkeys);
-		if ($qkeys){#if not empty set
+use vars qw($REQUEST $INNER_TID $LOGFILE $new_sock %Q $dbh);
+our %XML_KEYS=&XML_PARSE($REQUEST,'SIG_Get_KEYS');
+my $qkeys= keys %XML_KEYS;
+&response('LOG','MAIN-PARSER-RETURN',$qkeys);
+	if (keys %XML_KEYS){#if not empty set
 		my $IN_SET='';
 		$IN_SET=uri_unescape($XML_KEYS{msisdn}).":$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}" if  $XML_KEYS{msisdn};#General
 		$IN_SET=$IN_SET.":$XML_KEYS{code}:$XML_KEYS{sub_code}" if $XML_KEYS{code};#USSD
@@ -177,21 +168,20 @@ our $lwp = LWP::UserAgent->new;
 		$IN_SET=$IN_SET."$XML_KEYS{calllegid}:$XML_KEYS{bytes}:$XML_KEYS{seconds}:$XML_KEYS{mnc}:$XML_KEYS{mcc}:$XML_KEYS{amount}" if $XML_KEYS{calllegid};#DATA
 		$XML_KEYS{transactionid}=$XML_KEYS{SessionID} if $XML_KEYS{SessionID};#DATA
 		$XML_KEYS{imsi}=$XML_KEYS{GlobalIMSI} if $XML_KEYS{SessionID};#DATA
-#
-########## CONNECT TO MYSQL #####################################
-#&response('LOG','MAIN-DB-CONNECT','PREPARE');
-$dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless defined($dbh);#need to be here for threads
-#&response('LOG','MAIN-DB-CONNECT',"OPENED $dbh");
-#################################################################
-#
-		&response('LOGDB',"$XML_KEYS{request_type}","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'IN',$IN_SET);#Register IN request
-		#Get action type
-		my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});
-			eval {#save subref
-				our $subref=\&$ACTION_TYPE_RESULT;#Make reference to sub
-			};warn $@ if $@;  &response('LOG',"MAIN-ACTION-SUBREF","ERROR $ACTION_TYPE_RESULT") if $@;
-		&response('LOG','MAIN-GET_TYPE',$ACTION_TYPE_RESULT);
+## CACHED MYSQL CONNECTIONS ##
+$dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);#need to be here for threads
+&response('LOG','MAIN-DBI-START',$dbh);
 ##
+#
+		my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});#get action type
+#
+		eval {#save subref
+				our $subref=\&$ACTION_TYPE_RESULT;#reference to sub
+			};warn $@ if $@;  &response('LOG',"MAIN-ACTION-SUBREF","ERROR $ACTION_TYPE_RESULT") if $@;
+		&response('LOG','MAIN-GET_TYPE',$ACTION_TYPE_RESULT) if $debug>3;
+#
+	&response('LOGDB',"$ACTION_TYPE_RESULT","$XML_KEYS{transactionid}","$XML_KEYS{imsi}",'IN',$IN_SET);#Register IN request
+#
 	switch ($ACTION_TYPE_RESULT){#if we understand action
 		case 1 {#Incorrect URL
 			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT URL VARIABLES');
@@ -206,7 +196,7 @@ $dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless 
 			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT URI');return;}
 	else {#else switch ACTION TYPE RESULT
 		use vars qw($subref);
-		if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_GRP_ID}!=1)){#if sub options related to agent
+		if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_GRP_ID}!=1)&&($Q{SUB_OPTIONS})){#if sub options related to agent
 		&response('LOG','MAIN-ACTION-TYPE-AGENT',"FOUND $Q{SUB_AGENT_ID}");
 		my $AGENT_response=agent();
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$AGENT_response");
@@ -227,9 +217,9 @@ $dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);die "No auth!" unless 
 	}#switch ACTION TYPE RESULT
 }#if keys
 else{#else if keys
-	&response('LOGDB',"UNKNOWN REQUEST",0,0,'IN',"$XML_REQUEST");
-	&response('LOG','MAIN-XML-PARSE-KEYS',$qkeys);
-	print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT XML KEYS',0);
+#	&response('LOGDB',"UNKNOWN REQUEST",0,0,'IN',"$REQUEST");
+#	&response('LOG','MAIN-XML-PARSE-KEYS',k);
+	print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT KEYS',0);
 	return;
 }#else if keys
 }########## END sub main ########################################
@@ -245,9 +235,10 @@ my $REQUEST_LINE=$_[0];
 my $REQUEST_OPTION=$_[1];
 my @QUERY='';
 #
+if ($REQUEST_LINE=~m/xml version/){
+&response('LOG',"XML-PARSE-REQUEST",$REQUEST);
 my $backend="XML::Bare::SAX::Parser";
 local $ENV{XML_SIMPLE_PREFERRED_PARSER}="$backend";
-&response('LOG','XML_PARSE',"IN $backend");
 eval {#error exceprion
 use vars qw($xs);
 our $REQUEST=$xs->XMLin($REQUEST_LINE);
@@ -255,14 +246,23 @@ our $REQUEST=$xs->XMLin($REQUEST_LINE);
 our $DUMPER=Dumper (XML::Simple->new()->XMLin($REQUEST_LINE)) if $debug>3;
 };warn $@ if $@; return "XML not well-formed" if $@;
 #
-&response('LOG','XML_PARSE','OUT');
 use vars qw($REQUEST $DUMPER);
 &response('LOG',"XML-PARSE-REQUEST-$REQUEST_OPTION","$REQUEST_LINE") if $debug>3;
-#
 our $REMOTE_HOST=$REQUEST->{authentication}{host};
+}#if xml
+else {
+	&response('LOG',"CGI-PARSE-REQUEST",$REQUEST) if $debug>3;
+			foreach my $field (split(';',$REQUEST)) {
+    			if ($field=~/timestamp|message_date/){next;}
+				my ($key,$value)=split('=',$field);
+				chomp $value;
+				$Q{$key}=uri_unescape($value);#foreach
+			}#foreach field
+			return %Q;
+}#else cgi
 #
 switch ($REQUEST_OPTION){
-	case 'SIG_GetXML' {
+	case 'SIG_Get_KEYS' {
 		&response('LOG',"XML-PARSE-DUMPER","$DUMPER")if $debug>3;
 ##if request in 'query' format
 		if ($REQUEST->{query}){
@@ -273,8 +273,7 @@ switch ($REQUEST_OPTION){
 					$Q{$key}="$val";#All variables from request
 				}#foreach
 				#}#if
-				my $qkeys = keys %Q;
-				&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION",$qkeys)if $debug>3;;
+				&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION",keys %Q) if $debug>3;
 				return %Q;
 		}#if request
 ##if request in 'payments' format		
@@ -299,7 +298,7 @@ switch ($REQUEST_OPTION){
 				if ((ref($REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys}) eq 'HASH')&&($xml_keys eq 'agentcost')){#if HASH
 					my @SUBKEYS= keys %{ $REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys} } ;
 					foreach my $sub_xml_keys (@SUBKEYS){# foreach subkeys
-						&response('LOG',"XML-PARSE-RETURN-KEYS","$sub_xml_keys=$REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys}{$sub_xml_keys}")if $debug>3;
+	&response('LOG',"XML-PARSE-RETURN-KEYS","$sub_xml_keys=$REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys}{$sub_xml_keys}")if $debug>3;
 						$Q{$sub_xml_keys}=$REQUEST->{'complete-datasession-notification'}{callleg}{$xml_keys}{$sub_xml_keys};
 					}#foreach sub xml_keys
 				}#if HASH
@@ -315,6 +314,7 @@ switch ($REQUEST_OPTION){
 		}#elsif postdata
 		else{#unknown format
 			&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION",'UNKNOWN FORMAT');
+			return;
 		}#else unknown
 	}#xml
 	case 'SIG_GetMSRN' {
@@ -359,47 +359,31 @@ switch ($REQUEST_OPTION){
 ## Returns code of request type or 2 (no such type) or 3 (error)
 #################################################################
 sub GET_TYPE{
-use vars qw(%Q);
+use vars qw(%Q %CACHE);
 my $request_type=$_[0];
-my $SQL=qq[SELECT request FROM cc_actions where code="$request_type"];
-#
-my @sql_records=&SQL($SQL);
-&response('LOG','GET-TYPE-SQL-RECORDS',$sql_records[0]) if $debug>3;
-#
-if(@sql_records){#IF MYSQL OK
-	if ($sql_records[0]){
-		&response('LOG','GET_TYPE-MYSQL',@sql_records) if $debug>3;
-		my %MASK;
-		my 	@MASK=split('::',$sql_records[0]);
-			for (my $i =$[; $i <= $#MASK; $i++){
-				 $MASK{$MASK[$i]}='mask';
-			}#for
-#
+my @action_item=values $CACHE{$request_type}{'request'};
 our $PASS=1;
-foreach my $q(keys %Q){
-	if($MASK{$q} ne ''){
-		&response('LOG','GET_TYPE-XML',"OK $q=$Q{$q}");
-		 $PASS=0;
+#
+foreach my $item(keys %Q){
+	if ($item ~~ @action_item){
+		&response('LOG','GET-TYPE',"OK $item=$Q{$item}") if $debug>3;
+		$PASS=0;
 	}else{
-		&response('LOG','GET_TYPE-XML',"Error $q");
+		&response('LOG','GET-TYPE',"Error $item");
 		$PASS=1;last
 	}#else
 }#foreach
 #
-use vars qw($PASS);
 if( $PASS==0){
 uri_unescape($Q{calldestination})=~/^\*(\d{3})(\*|\#)(\D{0,}\d{0,}).?(.{0,}).?/;
 ($Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT})=($1,$3,$4);$Q{imsi}=0 if !$Q{imsi};$Q{imsi}=$Q{IMSI} if $Q{IMSI};
 foreach my $pair (split(';',${SQL("SELECT get_sub($Q{imsi})",2)}[0])){
 	my ($key,$value)=split('=',$pair);
 	$Q{$key}=$value;#foreach
-}
+}#foreach pair
+&response('LOG','GET-TYPE-SUB',"get_sub($Q{imsi})") if $debug>3;
 	return $Q{request_type};
 }else{return 1;}#else PASS STRUCTURE
-}else#NO ACTIONS TYPE
-	{return 2;}
-}else#if MYSQL ERROR
-	{return 3;}#else NOT GET_TYPE
 }########## END GET_TYPE ########################################
 #
 ########## SQL ##################################################
@@ -413,7 +397,7 @@ my $SQL=qq[$_[0]];
 my $flag=qq[$_[1]];
 $SQL=qq[SELECT get_text(].$SQL.qq[,NULL)] if $flag eq '1';
 my $now = localtime;
-print $LOGFILE "[$now]-[$INNER_TID]-[$timer]-[API-SQL-MYSQL]: $SQL\n" if (($debug>=2)and($SQL!~/AES_DECRYPT/)); #DONT CALL VIA &RESPONSE
+print $LOGFILE "[$now]-[$INNER_TID]-[$timer]-[API-SQL-MYSQL]: $SQL\n" if (($debug>2)and($SQL!~/AES_DECRYPT/)); #DONT CALL VIA &RESPONSE
 print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>3;
 #
 my ($rc, $sth);
@@ -431,14 +415,14 @@ else{#SELECT request
 	$sth=$dbh->prepare($SQL);
 	$rc=$sth->execute;#result code
 	@result=$sth->fetchrow_array;
-	$sth->finish();
+#	$sth->finish();
 }#else SELECT
 #
 if($rc){#if result code
 	our $sql_aff_rows =$rc;
 	#my $sql_record = @result;
 	&response('LOG','SQL-MYSQL-RETURNED',"@result $rc $new_id")if $debug>3;
-	&response('LOG','SQL-MYSQL-RETURNED',$#result+1);
+	&response('LOG','SQL-MYSQL-RETURNED',$#result+1)if $debug>3;
 	return \@result if $flag;
 	return @result; 
 }#if result code
@@ -455,7 +439,7 @@ else{#if no result code
 #################################################################
 sub response{
 #	
-use vars qw($INNER_TID $LOGFILE);
+use vars qw($INNER_TID $LOGFILE %CACHE);
 $INNER_TID=0 if !$INNER_TID;
 our $timer='0';
 my ($s, $usec) = gettimeofday();
@@ -465,20 +449,20 @@ my $mcs=$s.$usec;
 $timer=int($mcs-$INNER_TID) if $INNER_TID;
 my $now = localtime;
 #
-#open(LOGFILE,">>",'/opt/ruimtools/log/rcpi.log');
 open(STDERR, ">>", '/opt/ruimtools/log/errlog.log');
 #
 my ($ACTION_TYPE,$RESPONSE_TYPE,$RONE,$RSEC,$RTHI,$RFOUR)=@_;
 if($ACTION_TYPE!~m/^LO/){
-	my $SQL=qq[SELECT response FROM cc_actions where code="$ACTION_TYPE"];
-	my @sql_record=&SQL($SQL);
-my	$XML=$sql_record[0];
-my	($ROOT,$SUB1,$SUB2,$SUB3)=split('::',$XML);
+#	my $SQL=qq[SELECT response FROM cc_actions where code="$ACTION_TYPE"];
+#	my @sql_record=&SQL($SQL);
+#my	$XML=$sql_record[0];
+my	@XML=values $CACHE{$ACTION_TYPE}{'response'};
+my	($ROOT,$SUB1,$SUB2,$SUB3)=@XML;
 my $now = localtime;
 	if($RESPONSE_TYPE eq 'OK'){
-		my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1><$SUB2>$RSEC</$SUB2><$SUB3>$RTHI</$SUB3></$ROOT>\n] if ($RTHI);
-		$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1><$SUB2>$RSEC</$SUB2></$ROOT>\n] if (($RSEC ne '')&&(!$RTHI));
-		$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1></$ROOT>\n] if ($RSEC eq '');
+		my	$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1><$SUB2>$RSEC</$SUB2><$SUB3>$RTHI</$SUB3></$ROOT>] if ($RTHI);
+		$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1><$SUB2>$RSEC</$SUB2></$ROOT>] if (($RSEC ne '')&&(!$RTHI));
+		$OK=qq[<?xml version="1.0" ?><$ROOT><$SUB1>$RONE</$SUB1></$ROOT>] if ($RSEC eq '');
 		my $LOG="[$now]-[$INNER_TID]-[$timer]-[API-RESPONSE-SENT]: $OK\n"; 
 		print $LOGFILE $LOG if (($debug<=4)&&($debug!=0));
 		print $LOG if $debug>=3; 
@@ -648,7 +632,7 @@ switch ($Q{USSD_CODE}){
 	}#case 000
 ###
 	case "100"{#MYNUMBER request
-		&response('LOG','SIGSIG-USSD-MYNUMBER-REQUEST',"$Q{USSD_CODE}");
+		&response('LOG','SIG-USSD-MYNUMBER-REQUEST',"$Q{USSD_CODE}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
 		my $number=uri_unescape("$Q{msisdn}");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE}],1)}[0]);
@@ -772,7 +756,7 @@ $CODE=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_n
 ## Return MSRN or NULL, Status
 #################################################################
 sub LWP{
-use vars qw($lwp);
+my $lwp = LWP::UserAgent->new;
 our $transaction_id=timelocal(localtime()).int(rand(1000));
 our $MSG=$_[0];
 our $URI=$_[1];
@@ -927,18 +911,18 @@ return $LWP_result;
 sub auth{
 use vars qw(%Q $REMOTE_HOST $KEY);
 my ($type,$data,$sign,$key)=@_;
-return 0 if $Q{auth_key} eq '7354bff766a40f54d17f6e397cbbba76';#temp for old format
-&response('LOG',"RC-API-$type-AUTH","$type:$REMOTE_HOST:$Q{agent}:$Q{reseller}:$data:$sign")if $debug>3;
-&response('LOG',"RC-API-$type-AUTH","$type $Q{agent} $Q{reseller}");
+return 0 if $Q{auth_key} eq '7354bff766a40f54d17f6e397cbbba76';#temp for old format (!)
+&response('LOG',"RC-API-$type-AUTH","$Q{host}:$Q{agent}:$Q{reseller}:$data:$sign")if $debug>=3;
+&response('LOG',"RC-API-$type-AUTH","$Q{host} $Q{agent} $Q{reseller}");
 switch ($type){#select auth type
 	case "AGENT"{#resale auth
-		$REMOTE_HOST=~s/\.//g;#cut dots
-		$data=$REMOTE_HOST;
+		$Q{host}=~s/\.//g;#cut dots
+		$data=$Q{host};
 		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_agent WHERE login="$Q{agent}"],2)}[0];# KEY was input on starting
 		$sign=$Q{auth_key};
 	}#case resale
 	case "PAYMNT"{#paymnt auth
-		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_epaymnter WHERE host="$REMOTE_HOST"],2)}[0];# KEY was input on starting
+		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_epaymnter WHERE host="$Q{host}"],2)}[0];# KEY was input on starting
 	}#case paymnt
 else{
 	&response('LOG',"RC-API-AUTH-RETURNED","Error: UNKNOWN TYPE $type");
