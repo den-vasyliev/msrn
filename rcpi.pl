@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 080812rev.54.7';
+my $REV='API Server 090812rev.54.8 STABLE HFX-764,759';
 ##
 #################################################################
 ## 
@@ -19,7 +19,7 @@ use XML::Bare::SAX::Parser;
 use Digest::SHA qw(hmac_sha512_hex);
 use Digest::MD5 qw(md5);
 use URI::Escape;
-use LWP::UserAgent;
+#use LWP::UserAgent;
 #use LWP::ConnCache::MaxKeepAliveRequests;
 use Switch;
 use POSIX;
@@ -118,6 +118,7 @@ print $AMI
       "\r\n";
 #################################################################
 #
+#our $lwp = LWP::UserAgent->new;
 ############### XML #############################################
 our $xs = XML::Simple->new(ForceArray => 0,KeyAttr    => {});
 #################################################################
@@ -138,18 +139,20 @@ while ($new_sock = $sock->accept) {#accept incoming connection
     close $new_sock;#close socket
 }#while accept
 #
+our $tid;
 sub hndl{#thread handle
 	$new_sock = shift;#next new_sock
     while (our $REQUEST=<$new_sock>) {#read input
         	our $INNER_TID;#define inner tid
-        	my $thr=threads->tid();
+        	$tid=threads->tid();
 			my ($s, $usec) = gettimeofday();my $format = "%06d";$usec=sprintf($format,$usec);$INNER_TID=$s.$usec;#create inner tid
-			&response('LOG',"API-SOCKET-OPEN $thr $new_sock","##################################################");
+			&response('LOG',"API-SOCKET-OPEN $tid $new_sock","##################################################");
 			main();#call main
-			&response('LOG',"API-SOCKET-CLOSE $thr $new_sock","##################################################");
+			&response('LOG',"API-SOCKET-CLOSE $tid $new_sock","##################################################");
 			close($new_sock);#close sock
 	}#while read input
 }#hndl
+
 #################################################################
 #
 ########## MAIN #################################################
@@ -396,8 +399,6 @@ my $SQL=qq[$_[0]];
 my $flag=qq[$_[1]];
 $SQL=qq[SELECT get_text(].$SQL.qq[,NULL)] if $flag eq '1';
 my $now = localtime;
-#print $LOGFILE "[$now]-[$INNER_TID]-[$timer]-[API-SQL-MYSQL]: $SQL\n" if (($debug>2)and($SQL!~/AES_DECRYPT/)); #DONT CALL VIA &RESPONSE
-#print "[$now]-[API-SQL-MYSQL]: $SQL\n" if $debug>3;
 #
 my ($rc, $sth);
 our (@result, $new_id);
@@ -506,8 +507,8 @@ if ($Q{SUB_ID}>0){#if found subscriber
 			$Q{msisdn}='+'.$Q{msisdn} if $Q{msisdn}!~/^(\+)(\d{7,15})$/;#temp for old format
 			my $UPDATE_result=${SQL(qq[SELECT set_country($Q{imsi},$Q{mcc},$Q{mnc},"$Q{msisdn}")],2)}[0];
 			if ($UPDATE_result){#if contry change
-my $TRACK_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi}",NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
-	$TRACK_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('get_ussd_codes',NULL,NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
+my $TRACK_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi}",NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
+	$TRACK_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('get_ussd_codes',NULL,NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
 				&response('LOG','MAIN-LU-HISTORY-RETURN',"$TRACK_result");
 			}#if country change
 			print $new_sock &response('LU_CDR','OK',"$Q{SUB_ID}",'1');
@@ -517,7 +518,7 @@ my $TRACK_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi
 }else{#else no sub_id
 	print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.'  SUBSCRIBER NOT FOUND');
 	&response('LOG','LU-SUB-ID',"SUBSCRIBER NOT FOUND $Q{imsi}");
-	&response('LOGDB','LU_CDR',"$Q{transactionid}","$Q{imsi}",'ERORR','SUBSCRIBER NOT FOUND');
+	&response('LOGDB','LU_CDR',"$Q{transactionid}","$Q{imsi}",'ERROR','SUBSCRIBER NOT FOUND');
 	return -1;
 }#else not found
 }########## END sub LU_CDR ######################################
@@ -561,14 +562,13 @@ $Q{USSD_DEST}=$2;
 &response('LOGDB','SPOOL',"$Q{transactionid}","$Q{imsi}",'CALL',"$msisdn to $Q{USSD_DEST}");
 #
 if ($Q{USSD_DEST}){#if correct destination number
-my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
+my $msrn=CURL('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
 my $offline=1 if $msrn eq 'OFFLINE';
 $msrn=~s/\+//;#supress \+ from xml response
 &response('LOG','SPOOL-GET-MSRN-RESULT',$msrn);
 #
 	if (($msrn=~/\d{7,15}/)and(!$offline)){
-#print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[select get_text($Q{imsi},'spool','wait',"$msrn:$Q{USSD_DEST}")],2)}[0]);
-print $new_sock response('auth_callback_sig','OK',$Q{transactionid},"Please wait... Calling to $Q{USSD_DEST}");
+#print $new_sock response('auth_callback_sig','OK',$Q{transactionid},"Please wait... Calling to $Q{USSD_DEST}");
 ## Call SPOOL	
 my $AMI_Action=
 "Action: Originate\r\n".
@@ -600,6 +600,7 @@ SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msr
 #			my $rate=${SQL(qq[SELECT round(get_rate($msrn,$Q{USSD_DEST}),2)],2)}[0];
 			&response('LOG','SPOOL-GET-SPOOL',"$uniqueid");
 			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'SPOOL',"$uniqueid");
+print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[select get_text($Q{imsi},'spool','wait',"$msrn:$Q{USSD_DEST}")],2)}[0]);
 			return "SPOOL $q{Response} $q{Response}";
 	}#if msrn and dest
 	else{#else not msrn and dest
@@ -680,7 +681,7 @@ switch ($Q{USSD_CODE}){
 	case "126"{#RATES request
 		&response('LOG','SIG-USSD-RATES',"$Q{USSD_CODE} $Q{USSD_DEST}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST}");
-		my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
+		my $msrn=CURL('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
 		$Q{USSD_DEST}=~/(.?)(\d{12})/;
 		my $dest=$2;
 		my $rate=${SQL(qq[SELECT round(get_rate($msrn,$dest),2)],2)}[0] if $msrn=~/^(\+)?([1-9]\d{7,15})$/;
@@ -697,7 +698,7 @@ switch ($Q{USSD_CODE}){
 				 my $CFU_number=$2;
 				 my $SQL=qq[SELECT get_cfu_code($Q{imsi},"$CFU_number")];
 					my $CODE=${SQL("$SQL",2)}[0];
-$CODE=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_number","$Q{msisdn}",'ruimtools',"$CODE")],2)}[0]) if $CODE=~/\d{5}/;
+$CODE=CURL('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_number","$Q{msisdn}",'ruimtools',"$CODE")],2)}[0]) if $CODE=~/\d{5}/;
 					$CFU_number='NULL' if $CODE!~/0|1|INUSE/;
 					$SQL=qq[SELECT get_cfu_text("$Q{imsi}","$CODE",$CFU_number)];
 					my $TEXT_result=${SQL("$SQL",2)}[0];
@@ -720,7 +721,7 @@ $CODE=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_n
 		&response('LOG','SIG-COUNTRY-RATES-REQUEST',"$Q{USSD_CODE}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE}],1)}[0]);
-		my $USSD_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi}",NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
+		my $USSD_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi}",NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
 		#my $SQL_result=&LU_H(1);
 		return 'USSD $SQL_result';
 	}#case 128
@@ -728,7 +729,7 @@ $CODE=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_n
 		&response('LOG','SIG-USSD-CODES-REQUEST',"$Q{USSD_CODE}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE}],1)}[0]);
-		my $SMSMT_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('get_ussd_codes',NULL,NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
+		my $SMSMT_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('get_ussd_codes',NULL,NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
 		return "USSD $SMSMT_result";
 	}#case 129
 	
@@ -742,12 +743,12 @@ $CODE=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_n
 }#end switch ussd code
 }## END sub USSD ###################################
 #
-########### LWP #############################################
+########### CURL #############################################
 ## Process all types of requests
 ## Return MSRN or NULL, Status
 #################################################################
-sub LWP{
-my $lwp = LWP::UserAgent->new;
+sub CURL{
+#use vars qw($lwp);
 our $transaction_id=timelocal(localtime()).int(rand(1000));
 our $MSG=$_[0];
 our $URI=$_[1];
@@ -756,29 +757,20 @@ our @XML=();
 &response('LOGDB',"$MSG","$transaction_id","$Q{imsi}",'REQ',"$URI"); 
 #
 if ($URI){
-eval {use vars qw($URI @XML); alarm(10); local $SIG{ALRM} = sub { die "SSL timeout\n" }; &response('LOG',"LWP-$MSG-LWP-REQ","$URI");
-my $LWP_response = $lwp->get($URI);
- &response('LOG',"LWP-$MSG-LWP-RSP",$LWP_response->as_string()) if $debug>3; 
-if ($LWP_response->is_success) {  @XML=$LWP_response->decoded_content;
-}#if success
-else{ die $LWP_response->status_line; }#else success response
-};#eval lwp
-alarm(0);
-	if ($@) {#if errors
-		if ($@ =~ /SSL timeout/){ warn "Request timed out";	}#if timeout
-		else{ warn "Error in request: $@"; }#else other errors
-	}#if erorrs
+eval {use vars qw($URI @XML); &response('LOG',"API-CURL-$MSG-REQ","$URI");
+@XML = `/usr/bin/curl -k -f -s -m 10 "$URI"`;
+};warn $@ if $@;  &response('LOG',"API-CURL-ERROR","$@") if $@;
 }#if URI
 else{return 0}#else URI empty
 #
 use vars qw(@XML);
 if (@XML){
 	&response('LOG',"$MSG-RESPOND","@XML") if $debug>=3;
-	my $LWP_result=&XML_PARSE("@XML",$MSG);
-	&response('LOGDB',$MSG,"$transaction_id","$Q{imsi}",'RSP',"$LWP_result") if $LWP_result;
-	&response('LOGDB',$MSG,"$transaction_id","$Q{imsi}",'ERROR','LWP NO RESPOND') if !$LWP_result;
-	return $LWP_result;
-}#if lwp return
+	my $CURL_result=&XML_PARSE("@XML",$MSG);
+	&response('LOGDB',$MSG,"$transaction_id","$Q{imsi}",'RSP',"$CURL_result") if $CURL_result;
+	&response('LOGDB',$MSG,"$transaction_id","$Q{imsi}",'ERROR','CURL NO RESPOND') if !$CURL_result;
+	return $CURL_result;
+}#if CURL return
 else{# timeout
 	&response('LOG',"$MSG-REQUEST","Timed out 10 sec with socket");
 	&response('LOGDB',$MSG,"$transaction_id","$Q{imsi}",'ERROR','Timed out 10 sec with socket');
@@ -811,7 +803,7 @@ switch ($Q{code}){
 		$result='0';
 	}#case ping
 	case 'get_msrn' {#GET_MSRN
-		my $msrn=LWP('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
+		my $msrn=CURL('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
 	#	my $bill_result=${SQL(qq[select bill_agent("$Q{agent}",'SIG_GetMSRN'],2)}[0];
 		if(!$Q{CFU}){#agents subscriber
 		&response('LOGDB',"$Q{code}","$Q{transactionid}","$Q{imsi}",'OK',"");
@@ -822,7 +814,7 @@ switch ($Q{code}){
 			else{#if CFU subscriber
 		&response('LOGDB',"$Q{code}","$Q{transactionid}","$Q{imsi}",'OK',"CFU:$Q{login}");
 		my $agent_TID="$Q{transactionid}";
-	my $limit=LWP('get_session_time',${SQL(qq[SELECT get_uri2('get_session_time',NULL,NULL,$Q{msrn},$Q{SUB_ID},NULL)],2)}[0]) if $Q{SUB_OPTIONS}=~/CFU/;
+	my $limit=CURL('get_session_time',${SQL(qq[SELECT get_uri2('get_session_time',NULL,NULL,$Q{msrn},$Q{SUB_ID},NULL)],2)}[0]) if $Q{SUB_OPTIONS}=~/CFU/;
 		print $new_sock &response('rc_api_cmd','OK',$agent_TID,"$msrn","$limit") if $Q{options} ne 'cleartext';
 		$msrn=~s/\+// if $Q{options} eq 'cleartext';#cleartext for ${EXTEN} usage
 		print $new_sock "$agent_TID:$msrn:$limit" if $Q{options} eq 'cleartext';
@@ -841,11 +833,11 @@ switch ($Q{code}){
 			print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$result");
 		}#case get_stat
 	case 'send_ussd' {#SEND_USSD
-		$result=&LWP('send_ussd',${SQL(qq[SELECT get_uri2("$Q{code}",NULL,NULL,"$Q{msisdn}","$Q{sub_code}",NULL)],2)}[0]);
+		$result=CURL('send_ussd',${SQL(qq[SELECT get_uri2("$Q{code}",NULL,NULL,"$Q{msisdn}","$Q{sub_code}",NULL)],2)}[0]);
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$Q{msisdn} $result");
 		}#case send_ussd
 	case 'get_session_time' {#Get max session time
-		$result=&LWP('get_session_time',${SQL(qq[select get_uri2('get_session_time',$Q{imsi},NULL,$Q{msisdn},NULL,NULL)],2)}[0]);
+		$result=CURL('get_session_time',${SQL(qq[select get_uri2('get_session_time',$Q{imsi},NULL,$Q{msisdn},NULL,NULL)],2)}[0]);
 		print $new_sock $result if $Q{options} eq 'cleartext';
 		print $new_sock &response('rc_api_cmd','OK',$Q{transactionid},"$result") if $Q{options} ne 'cleartext';;
 		}#case get_session_time
@@ -855,6 +847,7 @@ switch ($Q{code}){
 		}#case set debug
 	case 'cb_status'{#set status of callback
 		$result=${SQL(qq[UPDATE cc_callback_spool set status="$Q{options}",manager_result="$Q{options1}" WHERE uniqueid="$Q{sub_code}"],2)}[0];
+		&response('LOG','RC-API-CB-STATUS',"$Q{options1} $result");
 		print $new_sock "$Q{sub_code} $result";
 		}#case set debug
 	else {
@@ -877,16 +870,16 @@ switch ($Q{code}){
 #################################################################
 sub agent{
 use vars qw(%Q);
-my $LWP_result;
+my $CURL_result;
 my $ussd_code='CB' if $Q{USSD_CODE}=~/111|112/;
 $ussd_code='UD' if $Q{USSD_CODE}!~/111|112|LU/;
 $ussd_code=$Q{request_type} if $Q{request_type}=~/CDR|POSTDATA|DataAUTH|SMS/;
 #if (($agent_key)&&($agent_addr)){#if found key and address
 		&response('LOG',"AGENT-REQUEST-$ussd_code","$Q{SUB_AGENT_ID}");
-$LWP_result=LWP("SIG_SendAgent_$ussd_code",${SQL(qq[SELECT get_uri2("SIG_SendAgent_$ussd_code","$Q{imsi}","$Q{SUB_AGENT_ADDR}",NULL,"$Q{USSD_CODE}","$Q{USSD_DEST}")],2)}[0]);
+$CURL_result=CURL("SIG_SendAgent_$ussd_code",${SQL(qq[SELECT get_uri2("SIG_SendAgent_$ussd_code","$Q{imsi}","$Q{SUB_AGENT_ADDR}",NULL,"$Q{USSD_CODE}","$Q{USSD_DEST}")],2)}[0]);
 		my $bill_result=${SQL(qq[select bill_agent($Q{SUB_AGENT_ID},"SIG_SendAgent_$ussd_code")],2)}[0];
-		&response('LOG',"AGENT-RESPONSE-$ussd_code","$LWP_result");
-return $LWP_result;
+		&response('LOG',"AGENT-RESPONSE-$ussd_code","$CURL_result");
+return $CURL_result;
 }# END sub AGENT
 ##################################################################
 #
@@ -971,7 +964,7 @@ else{#else if auth
 }#end esle if auth
 	&response('LOGDB',"PAYMNT","$REQUEST->{payment}{id}","$CARD_NUMBER",'RSP',"$SQL_T_result @TR");
 	print $new_sock "200 $SQL_T_result";
-	my $SMSMT_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2("pmnt_$SQL_T_result","$CARD_NUMBER",NULL,NULL,"$CARD_NUMBER","$REQUEST->{payment}{id}")],2)}[0]);# we cant send this sms with no auth because dont known whom
+	my $SMSMT_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2("pmnt_$SQL_T_result","$CARD_NUMBER",NULL,NULL,"$CARD_NUMBER","$REQUEST->{payment}{id}")],2)}[0]);# we cant send this sms with no auth because dont known whom
 	return $SQL_T_result;
 }# END sub PAYMNT ##################################################################
 #
@@ -1014,12 +1007,12 @@ my $INSERT_result=${SQL(qq[INSERT INTO cc_sms (`id`,`src`,`dst`,`flag`,`seq`,`te
 							if ($type eq 'IN'){#internal subscriber
 								&response('LOG','SMS-REQ',"INTERNAL");								
 #MSG_CODE, IMSI_, DEST_, MSN_, OPT_1, OPT_2
-$sms_result=LWP('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('SIG_SendSMSMT',NULL,"$sms_to","$sms_from",NULL,"$sms_text")],2)}[0]);#send sms mt
+$sms_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('SIG_SendSMSMT',NULL,"$sms_to","$sms_from",NULL,"$sms_text")],2)}[0]);#send sms mt
 								}#if internal
 #external subscriber
 							elsif($type eq 'OUT'){
 								&response('LOG','SMS-REQ',"EXTERNAL");
-$sms_result=LWP('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"$sms_to","$Q{msisdn}","$sms_from","$sms_text")],2)}[0]);#send sms mo
+$sms_result=CURL('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"$sms_to","$Q{msisdn}","$sms_from","$sms_text")],2)}[0]);#send sms mo
 						}#else external
 					}#foreach multisms
 $SQL=qq[UPDATE cc_sms set status="$sms_result" where src="$Q{msisdn}" and dst="$sms_to" and seq="$seq" and status=0 and imsi=$Q{imsi}];
