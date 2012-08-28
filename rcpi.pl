@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 090812rev.54.8 STABLE HFX-764,759';
+my $REV='API Server 280812rev.54.8 STABLE HFX-764-759-201-1104-931-908';
 ##
 #################################################################
 ## 
@@ -159,6 +159,10 @@ sub hndl{#thread handle
 sub main{
 #
 use vars qw($REQUEST $INNER_TID $LOGFILE $new_sock %Q $dbh);
+## CACHED MYSQL CONNECTIONS ##
+$dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);#need to be here for threads
+&response('LOG','MAIN-DBI-START',$dbh) if $debug>2;
+##
 our %XML_KEYS=&XML_PARSE($REQUEST,'SIG_Get_KEYS');
 my $qkeys= keys %XML_KEYS;
 &response('LOG','MAIN-PARSER-RETURN',$qkeys);
@@ -171,10 +175,6 @@ my $qkeys= keys %XML_KEYS;
 		$IN_SET=$IN_SET."$XML_KEYS{calllegid}:$XML_KEYS{bytes}:$XML_KEYS{seconds}:$XML_KEYS{mnc}:$XML_KEYS{mcc}:$XML_KEYS{amount}" if $XML_KEYS{calllegid};#DATA
 		$XML_KEYS{transactionid}=$XML_KEYS{SessionID} if $XML_KEYS{SessionID};#DATA
 		$XML_KEYS{imsi}=$XML_KEYS{GlobalIMSI} if $XML_KEYS{SessionID};#DATA
-## CACHED MYSQL CONNECTIONS ##
-$dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);#need to be here for threads
-&response('LOG','MAIN-DBI-START',$dbh) if $debug>2;
-##
 		my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});#get action type
 #
 		eval {#save subref
@@ -198,7 +198,7 @@ $dbh = DBI->connect_cached('DBI:mysql:msrn',$LOGIN,$PASS);#need to be here for t
 			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT URI');return;}
 	else {#else switch ACTION TYPE RESULT
 		use vars qw($subref);
-		if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_GRP_ID}!=1)&&($Q{SUB_OPTIONS})){#if agent sub
+		if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_GRP_ID}!=1)&&($Q{SUB_OPTIONS})&&($Q{USSD_CODE})){#if agent sub
 		&response('LOG','MAIN-ACTION-TYPE-AGENT',"FOUND $Q{SUB_AGENT_ID}");
 		my $AGENT_response=agent();
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$AGENT_response");
@@ -244,8 +244,7 @@ local $ENV{XML_SIMPLE_PREFERRED_PARSER}="$backend";
 eval {#error exceprion
 use vars qw($xs);
 our $REQUEST=$xs->XMLin($REQUEST_LINE);
-#our $REQUEST=XML::Simple->new()->XMLin($REQUEST_LINE); 
-our $DUMPER=Dumper (XML::Simple->new()->XMLin($REQUEST_LINE)) if $debug>3;
+our $DUMPER=Dumper ($xs->XMLin($REQUEST_LINE)) if $debug>3;
 };warn $@ if $@; return "XML not well-formed" if $@;
 #
 use vars qw($REQUEST $DUMPER);
@@ -785,8 +784,7 @@ else{# timeout
 #################################################################
 sub rc_api_cmd{
 use vars qw($INNER_TID);
-my $auth_result=&auth('AGENT');#turn on auth for all types of api request
-$Q{code}='get_msrn' if $Q{code} eq '1';#temp for old format
+my $auth_result=&auth('AGENT');#turn on auth for all types of api requests
 if ($auth_result==0){&response('LOG','RC-API-CMD',"AUTH OK $auth_result");}#if auth
 else{
 &response('LOGDB',"$Q{USSD_CODE}","$Q{transactionid}","$Q{imsi}",'ERROR',"NO AUTH $auth_result $Q{auth_key}");
@@ -895,9 +893,8 @@ return $CURL_result;
 sub auth{
 use vars qw(%Q $REMOTE_HOST $KEY);
 my ($type,$data,$sign,$key)=@_;
-return 0 if $Q{auth_key} eq '7354bff766a40f54d17f6e397cbbba76';#temp for old format (!)
-&response('LOG',"RC-API-$type-AUTH","$Q{host}:$Q{agent}:$Q{reseller}:$data:$sign")if $debug>=3;
-&response('LOG',"RC-API-$type-AUTH","$Q{host} $Q{agent} $Q{reseller}");
+&response('LOG',"RC-API-$type-AUTH","$REMOTE_HOST:$Q{host}:$Q{agent}:$Q{reseller}:$data:$sign")if $debug>=3;
+&response('LOG',"RC-API-$type-AUTH","$REMOTE_HOST $Q{host} $Q{agent} $Q{reseller}");
 switch ($type){#select auth type
 	case "AGENT"{#resale auth
 		$Q{host}=~s/\.//g;#cut dots
@@ -906,16 +903,18 @@ switch ($type){#select auth type
 		$sign=$Q{auth_key};
 	}#case resale
 	case "PAYMNT"{#paymnt auth
-		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_epaymnter WHERE host="$Q{host}"],2)}[0];# KEY was input on starting
+		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_epaymnter WHERE host="$REMOTE_HOST"],2)}[0];# KEY was input on starting
+		$data=$Q{salt};
 	}#case paymnt
 else{
 	&response('LOG',"RC-API-AUTH-RETURNED","Error: UNKNOWN TYPE $type");
 	}#end else switch type
 }#end switch type 
+&response('LOG',"RC-API-$type-DIGEST","$data  $key")if $debug>=3;
 my $digest=hmac_sha512_hex("$data","$key");#lets sign data with key
 my $dgst=substr($digest,0,7);#short format for logfile
 my $sgn=substr($sign,0,7);#short format for logfile
-&response('LOG',"RC-API-$type-DIGEST-CHECK","$dgst eq $sgn")if $debug>=3;;
+&response('LOG',"RC-API-$type-DIGEST-CHECK","$dgst eq $sgn")if $debug>=3;
 if ($digest eq $sign){#if ok
 &response('LOG','RC-API-AUTH',"OK");
 return 0;
@@ -928,45 +927,35 @@ return -1;
 #
 ## SUB PAYMNT ###################################################################
 sub PAYMNT{
-use vars qw($new_id);
-my @TR= keys %{$REQUEST->{payment}{transactions}{transaction}};
+my (@TR,@IDs);
 our ($SQL_T_result,$CARD_NUMBER,$AMOUNT);
-my $SQL='';
-$SQL=qq[INSERT INTO cc_epayments (`payment_id`, `ident`,`status`,`amount`,`currency`,`timestamp`,`salt`,`sign`,`transactions_ids`) values("$REQUEST->{payment}{id}","$REQUEST->{payment}{ident}","$REQUEST->{payment}{status}","$REQUEST->{payment}{amount}","$REQUEST->{payment}{currency}","$REQUEST->{payment}{timestamp}","$REQUEST->{payment}{salt}","$REQUEST->{payment}{sign}","@TR")];
+$SQL_T_result="-1";
+foreach my $TR(@{$REQUEST->{payment}{transactions}{transaction}}){
+	push @IDs,$TR->{id};
+}#foreach
+my $SQL=qq[INSERT INTO cc_epayments (`payment_id`, `ident`,`status`,`amount`,`currency`,`timestamp`,`salt`,`sign`,`transactions_ids`) values("$REQUEST->{payment}{id}","$REQUEST->{payment}{ident}","$REQUEST->{payment}{status}","$REQUEST->{payment}{amount}","$REQUEST->{payment}{currency}","$REQUEST->{payment}{timestamp}","$REQUEST->{payment}{salt}","$REQUEST->{payment}{sign}","@IDs")];
 my $SQL_P_result=&SQL($SQL);
 &response('LOG','PAYMNT-EPMTS-SQL-RESULT',"$SQL_P_result");
-&response('LOG','PAYMNT-AUTH-REQ',"PAYMNT,$REQUEST->{payment}{salt},$REQUEST->{payment}{sign}");
 ## AUTH
 if (auth('PAYMNT',$REQUEST->{payment}{salt},$REQUEST->{payment}{sign})==0){
-	&response('LOG','PAYMNT-TR-RESULT',"@TR");
-	use vars qw($rate $mch_name);
-		foreach my $tr (@TR){#for each transaction id
-			$REQUEST->{payment}{transactions}{transaction}{$tr}{info}=~s/"//g; #"
-			$REQUEST->{payment}{transactions}{transaction}{$tr}{info}=~/{(.*):(.*),(.*):(.*)}/;;
-			$CARD_NUMBER=$2;
-			my $SQL='';
-			$SQL=qq[INSERT INTO cc_epayments_transactions (`id`,`mch_id`, `srv_id`,`amount`,`currency`,`type`,`status`,`code`, `desc`,`info`) values("$tr","$REQUEST->{payment}{transactions}{transaction}{$tr}{mch_id}","$REQUEST->{payment}{transactions}{transaction}{$tr}{srv_id}","$REQUEST->{payment}{transactions}{transaction}{$tr}{amount}","$REQUEST->{payment}{transactions}{transaction}{$tr}{currency}","$REQUEST->{payment}{transactions}{transaction}{$tr}{type}","$REQUEST->{payment}{transactions}{transaction}{$tr}{status}","$REQUEST->{payment}{transactions}{transaction}{$tr}{code}","$REQUEST->{payment}{transactions}{transaction}{$tr}{desc}","$CARD_NUMBER")];
-			$SQL_T_result=&SQL($SQL);
-			&response('LOG','PAYMNT-TR-SQL-RESULT',"$SQL_T_result");
-			$SQL=qq[UPDATE cc_epayments set process="$SQL_T_result" where id=$new_id];
-			my $SQL_update_result=&SQL($SQL);
-				if (($REQUEST->{payment}{transactions}{transaction}{$tr}{type}==11)&&($SQL_T_result>0)){#if debited transaction
-					$AMOUNT=$REQUEST->{payment}{transactions}{transaction}{$tr}{amount};
-					$SQL=qq[INSERT into `msrn`.`cc_epayment_log` (`amount`, `paymentmethod`, `cardid`, `cc_owner`) values (round($AMOUNT*(SELECT value from cc_currencies WHERE currency='UAH')/100,3), "IPAY", (select id from cc_card where username="$CARD_NUMBER"),"$tr")];
-					my $SQL_debit_result=&SQL($SQL);
-					&response('LOG','PAYMNT-TR-DEBIT-SQL-RESULT',"$SQL_debit_result");
-				}#end if debited
+	&response('LOG','PAYMNT-TR-RESULT',"@IDs");
+		foreach my $TR (@{$REQUEST->{payment}{transactions}{transaction}}){#for each transaction id
+			$TR->{desc}=~/(\d{1,12})/;
+			$CARD_NUMBER=$1;
+my $SQL=qq[INSERT INTO cc_epayments_transactions (`id`,`mch_id`, `srv_id`,`amount`,`currency`,`type`,`status`,`code`, `desc`,`info`) values("$TR->{id}","$TR->{mch_id}","$TR->{srv_id}","$TR->{amount}","$TR->{currency}","$TR->{type}","$TR->{status}","$TR->{code}","$TR->{desc}","$CARD_NUMBER")];
+$SQL_T_result=&SQL($SQL);
+&response('LOG','PAYMNT-TR-SQL-RESULT',"$SQL_T_result");
 		}#foreach tr
 }#end if auth
 else{#else if auth
-	$SQL_T_result="-1";
 	&response('LOG','PAYMNT-AUTH-RESULT',"NO AUTH");
 }#end esle if auth
-	&response('LOGDB',"PAYMNT","$REQUEST->{payment}{id}","$CARD_NUMBER",'RSP',"$SQL_T_result @TR");
+	&response('LOGDB',"PAYMNT","$REQUEST->{payment}{id}","$CARD_NUMBER",'RSP',"$SQL_T_result @IDs");
 	print $new_sock "200 $SQL_T_result";
-	my $SMSMT_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2("pmnt_$SQL_T_result","$CARD_NUMBER",NULL,NULL,"$CARD_NUMBER","$REQUEST->{payment}{id}")],2)}[0]);# we cant send this sms with no auth because dont known whom
+# we cant send this sms with no auth because dont known whom
+	my $SMSMT_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2("pmnt_$SQL_T_result","$CARD_NUMBER",NULL,NULL,"$CARD_NUMBER","$REQUEST->{payment}{id}")],2)}[0]);
 	return $SQL_T_result;
-}# END sub PAYMNT ##################################################################
+}## END sub PAYMNT ##################################################################
 #
 ########################### SMS section ############################################
 ### sub SMS ########################################################################
@@ -1103,7 +1092,7 @@ return $sql_result;
 ### sub DataAUTH ###################################################################
 sub DataAUTH{
 use vars qw(%Q);
-my $SQL=qq[SELECT data_auth("$Q{IMSI}","$Q{MCC}","$Q{MNC}")];
+my $SQL=qq[SELECT data_auth("$Q{IMSI}","$Q{MCC}","$Q{MNC}","$Q{TotalCurrentByteLimit}")];
 my @sql_result=&SQL($SQL);
 my $data_auth=$sql_result[0];
 &response('LOG','DataAUTH',$data_auth);
