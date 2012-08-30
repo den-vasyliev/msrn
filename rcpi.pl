@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 280812rev.54.8 STABLE HFX-764-759-201-1104-931-908';
+my $REV='API Server 280812rev.54.8 STABLE HFX-764-759-201-1104-931-908-1114';
 ##
 #################################################################
 ## 
@@ -785,6 +785,7 @@ else{# timeout
 sub rc_api_cmd{
 use vars qw($INNER_TID);
 my $auth_result=&auth('AGENT');#turn on auth for all types of api requests
+$auth_result=0 if $Q{sub_code} eq 'get_card_number';
 if ($auth_result==0){&response('LOG','RC-API-CMD',"AUTH OK $auth_result");}#if auth
 else{
 &response('LOGDB',"$Q{USSD_CODE}","$Q{transactionid}","$Q{imsi}",'ERROR',"NO AUTH $auth_result $Q{auth_key}");
@@ -903,7 +904,7 @@ switch ($type){#select auth type
 		$sign=$Q{auth_key};
 	}#case resale
 	case "PAYMNT"{#paymnt auth
-		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_epaymnter WHERE host="$REMOTE_HOST"],2)}[0];# KEY was input on starting
+		$key=${SQL(qq[SELECT AES_DECRYPT(auth_key,"$KEY") from cc_epaymnter WHERE name="IPAY"],2)}[0];# KEY was input on starting
 		$data=$Q{salt};
 	}#case paymnt
 else{
@@ -1112,11 +1113,11 @@ print $new_sock "200";
 ###
 sub msisdn_allocation{
 use vars qw(%Q);
-my $SQL=qq[UPDATE cc_card set phone="$Q{MSISDN}" where useralias=$Q{IMSI} or firstname=$Q{IMSI}];
+my $SQL=qq[UPDATE cc_card set phone="$Q{msisdn}" where useralias=$Q{imsi} or firstname=$Q{imsi}];
 my $sql_result=&SQL($SQL);
 print $new_sock &response('msisdn_allocation','OK',$Q{transactionid},$sql_result);
 &response('LOG','msisdn_allocation',$sql_result);
-&response('LOGDB','msisdn_allocation',1,$Q{IMSI},'RSP',"$Q{MSISDN} $sql_result");	
+&response('LOGDB','msisdn_allocation',1,$Q{imsi},'RSP',"$Q{msisdn} $sql_result");	
 }#end sub msisdn_allocation #######################################################
 #
 ######### END #################################################	
