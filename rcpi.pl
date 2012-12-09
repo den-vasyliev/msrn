@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 280812rev.54.8 STABLE HFX-764-759-201-1104-931-908-1114';
+my $REV='API Server 091212rev.54.8 STABLE HFX-764-759-201-1104-931-908-1114-758-974-846';
 ##
 #################################################################
 ## 
@@ -205,7 +205,7 @@ my $qkeys= keys %XML_KEYS;
 		&response('LOG',"MAIN-AGENT-ACTION-RESULT-$ACTION_TYPE_RESULT","$AGENT_response");
 		return $AGENT_response;
 		}#if sub options
-		eval {#safty subroutine
+		eval {#safety subroutine
 		our $ACTION_RESULT=&$subref();#calling to reference
 		};warn $@ if $@;  &response('LOG',"MAIN-ACTION-SUBREF","ERROR $ACTION_TYPE_RESULT") if $@;
 		use vars qw($ACTION_RESULT);
@@ -219,8 +219,6 @@ my $qkeys= keys %XML_KEYS;
 	}#switch ACTION TYPE RESULT
 }#if keys
 else{#else if keys
-#	&response('LOGDB',"UNKNOWN REQUEST",0,0,'IN',"$REQUEST");
-#	&response('LOG','MAIN-XML-PARSE-KEYS',k);
 	print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT KEYS',0);
 	return;
 }#else if keys
@@ -452,9 +450,6 @@ open(STDERR, ">>", '/opt/ruimtools/log/errlog.log');
 #
 my ($ACTION_TYPE,$RESPONSE_TYPE,$RONE,$RSEC,$RTHI,$RFOUR)=@_;
 if($ACTION_TYPE!~m/^LO/){
-#	my $SQL=qq[SELECT response FROM cc_actions where code="$ACTION_TYPE"];
-#	my @sql_record=&SQL($SQL);
-#my	$XML=$sql_record[0];
 my	@XML=values $CACHE{$ACTION_TYPE}{'response'};
 my	($ROOT,$SUB1,$SUB2,$SUB3)=@XML;
 my $now = localtime;
@@ -527,7 +522,6 @@ my $TRACK_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{ims
 ################################################################# 
 #
 sub auth_callback_sig{
-#	my	$result=agent("$Q{USSD_CODE}","$Q{imsi}","$Q{SUB_AGENT_ID}","$Q{USSD_DEST}","$Q{USSD_EXT}","$Q{SUB_AGENT_ADDR}","$Q{SUB_AGENT_KEY}");
 use vars qw(%Q);
 my $result;
 &response('LOG',"SIG-$Q{USSD_CODE}-REQUEST","$Q{imsi},$Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT}");
@@ -567,7 +561,6 @@ $msrn=~s/\+//;#supress \+ from xml response
 &response('LOG','SPOOL-GET-MSRN-RESULT',$msrn);
 #
 	if (($msrn=~/\d{7,15}/)and(!$offline)){
-#print $new_sock response('auth_callback_sig','OK',$Q{transactionid},"Please wait... Calling to $Q{USSD_DEST}");
 ## Call SPOOL	
 my $AMI_Action=
 "Action: Originate\r\n".
@@ -665,17 +658,10 @@ switch ($Q{USSD_CODE}){
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE}],1)}[0]) if !$Q{USSD_DEST};
 		return 'USSD 0' if !$Q{USSD_DEST};
 		my $voucher_add=${SQL(qq[SELECT voucher($Q{imsi},"$Q{SUB_CN}","$Q{USSD_DEST}")],2)}[0];
-			if($voucher_add>0){
-					&response('LOG','SIG-USSD-VOUCHER-SUCCESS',"$Q{USSD_DEST}");
-					&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST}");
-					print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"YOUR BALANCE $Q{SUB_CREDIT} UPDATED TO $voucher_add\$");
-					return 'USSD 0';
-			}else{
-					&response('LOG','SIG-USSD-VOUCHER-ERROR',"NOT VALID");
-					&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'ERROR',"$Q{USSD_DEST} NOT VALID");
-					print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"VOUCHER NOT VALID");
-					return 'USSD -1';
-				}#else
+			&response('LOG','SIG-USSD-VOUCHER-RESULT',"$voucher_add $Q{USSD_DEST}");
+			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'RSP',"$voucher_add $Q{USSD_CODE} $Q{USSD_DEST}");
+			print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE}$voucher_add],1)}[0]);
+			return "USSD $voucher_add";
 	}#case 123
 	case "126"{#RATES request
 		&response('LOG','SIG-USSD-RATES',"$Q{USSD_CODE} $Q{USSD_DEST}");
@@ -752,8 +738,9 @@ our $transaction_id=timelocal(localtime()).int(rand(1000));
 our $MSG=$_[0];
 our $URI=$_[1];
 our @XML=();
+$URI=~/(request_type=\w{0,20})/;
 #
-&response('LOGDB',"$MSG","$transaction_id","$Q{imsi}",'REQ',"$URI"); 
+&response('LOGDB',"$MSG","$transaction_id","$Q{imsi}",'REQ',"CURL $1"); 
 #
 if ($URI){
 eval {use vars qw($URI @XML); &response('LOG',"API-CURL-$MSG-REQ","$URI");
@@ -843,6 +830,10 @@ switch ($Q{code}){
 	case 'set_debug'{#set debug
 		$debug=$Q{sub_code};
 		$result=$debug;
+		}#case set debug
+	case 'load_cache'{#load cache
+		my $cache=db_cache();
+		$result=$cache;
 		}#case set debug
 	case 'cb_status'{#set status of callback
 		$result=${SQL(qq[UPDATE cc_callback_spool set status="$Q{options}",manager_result="$Q{options1}" WHERE uniqueid="$Q{sub_code}"],2)}[0];
@@ -970,7 +961,7 @@ my ($page,$pg_num,$seq)=($1,$2,$3);
 #
 return 4 if $seq eq '';#new format from 01.08
 #
-$Q{USSD_EXT}=~/^(\D|00)?([1-9]\d{7,15})\*(\w+)#/;#parse msisdn
+$Q{USSD_EXT}=~/^(\D|00)?([1-9]\d{7,15})\*(\w+)#?/;#parse msisdn
 $sms_to='+'.$2;#intern format
 $sms_long_text=$3;#sms text
 #
