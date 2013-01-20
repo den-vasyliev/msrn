@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 091212rev.54.8 STABLE HFX-764-759-201-1104-931-908-1114-758-974-846';
+my $REV='API Server 200113rev.55.0 STABLE +PAYPAL +CALL +DLMNT';
 ##
 #################################################################
 ## 
@@ -64,6 +64,7 @@ $SIG{HUP} = \&phoenix;
 # trap $SIG{PIPE}
 sub phoenix {
 	print("RELOAD CONFIGURATION...");
+#	&db_cache();
 	my $SELF = $0;   # needs full path
 	exec($SELF) or die "Couldn't restart: $!\n";
 }
@@ -109,13 +110,6 @@ my $rows=[];
 }#db_cache
 ##################################################################
 #
-############### AMI #############################################
-our $AMI = new IO::Socket::INET (PeerAddr => $HOST,PeerPort => $AMI_Port,Proto => 'tcp','Type' => SOCK_STREAM,'Timeout' => 3);
-print $AMI
-      "Action: login\r\n" .
-      "Username: admin\r\n" .
-      "Secret: admin\r\n" .
-      "\r\n";
 #################################################################
 #
 #our $lwp = LWP::UserAgent->new;
@@ -198,7 +192,12 @@ my $qkeys= keys %XML_KEYS;
 			print $new_sock &response('LU_CDR','ERROR','#'.__LINE__.' INCORRECT URI');return;}
 	else {#else switch ACTION TYPE RESULT
 		use vars qw($subref);
-		if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_GRP_ID}!=1)&&($Q{SUB_OPTIONS})&&($Q{USSD_CODE})){#if agent sub
+$Q{USSD_CODE}="NULL" if !$Q{USSD_CODE};
+&response('LOG','MAIN-ACTION-CHECK-OPTIONS:',"$ACTION_TYPE_RESULT in $Q{SUB_OPTIONS} and $Q{USSD_CODE} (($Q{SUB_GRP_ID}!=1)&&(($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))") if $debug>3;
+if (($Q{SUB_GRP_ID}!=1)&&(($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g)))
+#if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g))&&($Q{SUB_GRP_ID}!=1)&&($Q{SUB_OPTIONS})&&($Q{USSD_CODE}))
+#if ((($Q{SUB_OPTIONS}=~/$ACTION_TYPE_RESULT/g)||(($Q{SUB_OPTIONS}=~/$Q{USSD_CODE}/g)&&($Q{USSD_CODE})))&&($Q{SUB_GRP_ID}!=1)&&($Q{SUB_OPTIONS}))
+{#if agent sub
 		&response('LOG','MAIN-ACTION-TYPE-AGENT',"FOUND $Q{SUB_AGENT_ID}");
 		my $AGENT_response=agent();
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$AGENT_response");
@@ -318,6 +317,8 @@ switch ($REQUEST_OPTION){
 	}#xml
 	case 'SIG_GetMSRN' {
 		my $MSRN=$REQUEST->{MSRN_Response}{MSRN};
+		$Q{iot}=$REQUEST->{MSRN_Response}{IOT};
+		$Q{iot_charge}=$REQUEST->{MSRN_Response}{IOT_CHARGE};
 		our $ERROR=$REQUEST->{Error_Message};
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$MSRN $ERROR");
 		return $MSRN;
@@ -346,6 +347,24 @@ switch ($REQUEST_OPTION){
 		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$TIME $ERROR");
 		return "$ERROR$TIME";
 	}#get time
+	case 'get_user_info' {
+		my $BALANCE=$REQUEST->{Balance};
+		our $ERROR=$REQUEST->{Reason};
+		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$BALANCE $ERROR");
+		return "$ERROR$BALANCE";
+	}#get user info
+	case 'set_user_balance' {
+		my $BALANCE=$REQUEST->{Result};
+		our $ERROR=$REQUEST->{Reason};
+		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$BALANCE $ERROR");
+		return "$ERROR$BALANCE";
+	}#set user balance
+	case 'new_user' {
+		my $NEW=$REQUEST->{Result};
+		our $ERROR=$REQUEST->{Reason};
+		&response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$NEW $ERROR");
+		return "$ERROR$NEW";
+	}#new user
 	else {
 		print &response('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION",'NO OPTION FOUND $@');
 		return "Error: $@";}
@@ -368,14 +387,16 @@ foreach my $item(keys %Q){
 		&response('LOG','GET-TYPE',"OK $item=$Q{$item}") if $debug>3;
 		$PASS=0;
 	}else{
-		&response('LOG','GET-TYPE',"Error $item");
-		$PASS=1;last
+		&response('LOG','GET-TYPE',"Warning $item");
+#		$PASS=1;last
+		$PASS=0;
 	}#else
 }#foreach
 #
 if( $PASS==0){
 uri_unescape($Q{calldestination})=~/^\*(\d{3})(\*|\#)(\D{0,}\d{0,}).?(.{0,}).?/;
 ($Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT})=($1,$3,$4);$Q{imsi}=0 if !$Q{imsi};$Q{imsi}=$Q{IMSI} if $Q{IMSI};
+#$Q{SUB_OPTIONS}="get_sub($Q{imsi})";
 foreach my $pair (split(';',${SQL("SELECT get_sub($Q{imsi})",2)}[0])){
 	my ($key,$value)=split('=',$pair);
 	$Q{$key}=$value;#foreach
@@ -394,11 +415,11 @@ sub SQL{
 use vars qw($LOGFILE $dbh $INNER_TID $timer);
 my $SQL=qq[$_[0]];
 my $flag=qq[$_[1]];
-$SQL=qq[SELECT get_text(].$SQL.qq[,NULL)] if $flag eq '1';
+$SQL=qq[SELECT get_text($SQL)] if $flag eq '1';
 my $now = localtime;
 #
 my ($rc, $sth);
-our (@result, $new_id);
+our (@result, $new_id,$error_str);
 #
 @result=();
 if($SQL!~m/^SELECT/i){#INSERT/UPDATE request
@@ -424,7 +445,8 @@ if($rc){#if result code
 	return @result; 
 }#if result code
 else{#if no result code
-	&response('LOG','SQL-MYSQL-RETURNED','Error');
+	#$error_str=;
+	&response('LOG','SQL-MYSQL-RETURNED','Error: '.$dbh->errstr);
 	return -1;
 }#else MYSQL ERROR
 }########## END sub SQL	#########################################
@@ -501,8 +523,9 @@ if ($Q{SUB_ID}>0){#if found subscriber
 			$Q{msisdn}='+'.$Q{msisdn} if $Q{msisdn}!~/^(\+)(\d{7,15})$/;#temp for old format
 			my $UPDATE_result=${SQL(qq[SELECT set_country($Q{imsi},$Q{mcc},$Q{mnc},"$Q{msisdn}")],2)}[0];
 			if ($UPDATE_result){#if contry change
-my $TRACK_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi}",NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
-	$TRACK_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('get_ussd_codes',NULL,NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
+			my $msrn=CURL('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
+my $TRACK_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi}",NULL,"$Q{msisdn}",'ruimtools',"$Q{iot_charge}")],2)}[0]);
+	#$TRACK_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('get_ussd_codes',NULL,NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
 				&response('LOG','MAIN-LU-HISTORY-RETURN',"$TRACK_result");
 			}#if country change
 			print $new_sock &response('LU_CDR','OK',"$Q{SUB_ID}",'1');
@@ -547,6 +570,8 @@ return $result;
 ##############################################
 sub SPOOL{
 use vars qw($ERROR %Q $sql_aff_rows $AMI);
+my $TMPDIR="/opt/ruimtools/tmp";
+my $CALLDIR="/var/spool/asterisk/outgoing";
 my $msisdn=uri_unescape($Q{msisdn});
 my $uniqueid=timelocal(localtime())."-".int(rand(1000000));
 $Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{7,15})$/;
@@ -560,40 +585,32 @@ my $offline=1 if $msrn eq 'OFFLINE';
 $msrn=~s/\+//;#supress \+ from xml response
 &response('LOG','SPOOL-GET-MSRN-RESULT',$msrn);
 #
-	if (($msrn=~/\d{7,15}/)and(!$offline)){
+if (($msrn=~/\d{7,15}/)and(!$offline)){
 ## Call SPOOL	
-my $AMI_Action=
-"Action: Originate\r\n".
-"Channel: $Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}\r\n".
-"Context: a2billing-callback\r\n".
-"Exten: $Q{USSD_DEST}\r\n".
-"CallerID: $Q{USSD_DEST}\r\n".
-"CallerIDName: <$Q{USSD_DEST}>\r\n".
-"Priority: 1\r\n".
-"ActionID: $uniqueid\r\n".
-"Async: 1\r\n".
-"Account: $Q{SUB_CN}\r\n".
-"Variable: CALLED=$msrn,CALLING=$Q{USSD_DEST},CBID=$uniqueid,LEG=$Q{SUB_CN}\r\n".
-"\r\n";
-## Check SPOOL
-print $AMI $AMI_Action;#print to AMI socket
-my ($line,$key,$val,@array_line,$a,%q);
-recv($AMI,$line,500,0);#read socket
-@array_line=split('\r',$line);#split to lines
-foreach $a(@array_line){#foreach line
-($key,$val)=split(': ',$a);#split key val
-$q{Response}=$val if $key=~/Response/;#if response
-$q{ActionID}=$val if $key=~/ActionID/;#if actionid
-$q{Message}=$val if $key=~/Message/;#if message
-}#foreach line
-#			
-&response('LOG','SPOOL-AMI-RETURN',"$q{Response},$q{ActionID},$q{Message}");			
-SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}","$Q{USSD_DEST}","$Q{SUB_CN}","CB $q{Response}")],2);	
+my $CALLFILE="$uniqueid-$msrn";
+my $CALL = IO::File->new("$TMPDIR/$CALLFILE", "w");
+my $CallAction=qq[Channel: $Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}
+Context: a2billing-callback
+Extension: $Q{USSD_DEST}
+CallerID: "$Q{USSD_DEST}" <$Q{USSD_DEST}>
+Priority: 1
+Account: $Q{SUB_CN}
+Setvar: CALLED=$msrn
+Setvar: CALLING=$Q{USSD_DEST}
+Setvar: CBID=$uniqueid
+Setvar: LEG=$Q{SUB_CN}
+Setvar: ActionID=$uniqueid];
+print $CALL $CallAction;
+close $CALL;
+my $mv=`mv $TMPDIR/$CALLFILE $CALLDIR/$CALLFILE`;
+chown 100,101,"$CALLDIR/$CALLFILE";
+#&response('LOG','SPOOL-AMI-RETURN',"$q{Response},$q{ActionID},$q{Message}");			
+SQL(qq[select spool($msrn,"$uniqueid","$Q{SUB_TRUNK_TECH}/$Q{SUB_TRUNK_PREF}$msrn\@$Q{SUB_TRUNKCODE}","$Q{USSD_DEST}","$Q{SUB_CN}","CB $mv")],2);	
 #			my $rate=${SQL(qq[SELECT round(get_rate($msrn,$Q{USSD_DEST}),2)],2)}[0];
 			&response('LOG','SPOOL-GET-SPOOL',"$uniqueid");
 			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'SPOOL',"$uniqueid");
 print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[select get_text($Q{imsi},'spool','wait',"$msrn:$Q{USSD_DEST}")],2)}[0]);
-			return "SPOOL $q{Response} $q{Response}";
+			return "SPOOL $mv";
 	}#if msrn and dest
 	else{#else not msrn and dest
 		&response('LOGDB','SPOOL',"$Q{transactionid}","$Q{imsi}",'ERROR',"MISSING MSRN $msrn $Q{USSD_DEST} $offline $ERROR");
@@ -619,7 +636,7 @@ switch ($Q{USSD_CODE}){
 	case "000"{#SUPPORT request
 		&response('LOG','SIG-USSD-SUPPORT-REQUEST',"$Q{USSD_CODE}");
 		&response('LOGDB','support',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE}],1)}[0]);
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE},NULL],1)}[0]);
 		return "USSD 0";
 	}#case 000
 ###
@@ -627,7 +644,7 @@ switch ($Q{USSD_CODE}){
 		&response('LOG','SIG-USSD-MYNUMBER-REQUEST',"$Q{USSD_CODE}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
 		my $number=uri_unescape("$Q{msisdn}");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE}],1)}[0]);
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE},NULL],1)}[0]);
 		return "USSD 0";
 	}#case 100
 ###
@@ -645,7 +662,7 @@ switch ($Q{USSD_CODE}){
 		&response('LOG','SIG-USSD-SMS-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST} $Q{USSD_EXT}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST} $Q{USSD_EXT}");
 		my $SMS_result=SMS();#process sms
-		my $SMS_response=${SQL(qq[NULL,'ussd',$Q{USSD_CODE}$SMS_result],1)}[0];#get response text by sms result
+		my $SMS_response=${SQL(qq[NULL,'ussd',$Q{USSD_CODE}$SMS_result,NULL],1)}[0];#get response text by sms result
 		$SMS_response="Sorry, unknown result. Please call *000#" if $SMS_response eq '';#something wrong - need support
 		&response('LOG','SIG-USSD-SMS-RESULT',"$SMS_result");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'RSP',"$SMS_result");
@@ -655,23 +672,42 @@ switch ($Q{USSD_CODE}){
 ###
 	case "123"{#voucher refill request
 		&response('LOG','SIG-USSD-VOUCHER-BALANCE-REQUEST',"$Q{USSD_CODE}");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE}],1)}[0]) if !$Q{USSD_DEST};
+		my $balance=CURL('get_user_info',${SQL(qq[SELECT get_uri2('get_user_info',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE},$balance*1.25],1)}[0]) if !$Q{USSD_DEST};
 		return 'USSD 0' if !$Q{USSD_DEST};
-		my $voucher_add=${SQL(qq[SELECT voucher($Q{imsi},"$Q{SUB_CN}","$Q{USSD_DEST}")],2)}[0];
+		my $voucher_add=${SQL(qq[SELECT voucher("$Q{SUB_CN}","$Q{USSD_DEST}")],2)}[0];
 			&response('LOG','SIG-USSD-VOUCHER-RESULT',"$voucher_add $Q{USSD_DEST}");
 			&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'RSP',"$voucher_add $Q{USSD_CODE} $Q{USSD_DEST}");
-			print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE}$voucher_add],1)}[0]);
-			return "USSD $voucher_add";
+my $result=CURL('set_user_balance',${SQL(qq[SELECT get_uri2('set_user_balance',"$Q{imsi}",NULL,NULL,$Q{USSD_DEST},NULL)],2)}[0]) if $voucher_add==11;
+			$balance=CURL('get_user_info',${SQL(qq[SELECT get_uri2('get_user_info',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]) if $voucher_add==11;
+			print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE}$voucher_add,$balance*1.25],1)}[0]);
+			return "USSD $voucher_add $result";
 	}#case 123
+###
+	case "124"{#support old sim configuration
+	$Q{USSD_CODE}="123";
+	return "USSD ".USSD();
+	}#case 124
+###
+	case "125"{#voip account
+	&response('LOG','SIG-USSD-VOIP-ACCOUNT-REQUEST',"$Q{USSD_CODE}");
+	my $new_user=CURL('new_user',${SQL(qq[SELECT get_uri2('new_user',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]) if !$Q{SUB_VOIP};
+	&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'RSP',"$Q{USSD_CODE} $new_user") if !$Q{SUB_VOIP};
+	print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[$Q{imsi},'ussd',$Q{USSD_CODE},NULL],1)}[0]);
+	return "USSD 125";
+	}#case 124
+###
 	case "126"{#RATES request
 		&response('LOG','SIG-USSD-RATES',"$Q{USSD_CODE} $Q{USSD_DEST}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST}");
-		my $msrn=CURL('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
-		$Q{USSD_DEST}=~/(.?)(\d{12})/;
+		$Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{1,15})$/;
 		my $dest=$2;
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Please check destination number!") if !$dest;
+		return "USSD -1" if !$dest;
+		my $msrn=CURL('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
 		my $rate=${SQL(qq[SELECT round(get_rate($msrn,$dest),2)],2)}[0] if $msrn=~/^(\+)?([1-9]\d{7,15})$/;
 		&response('LOG','SIG-USSD-RATES-RETURN',"$rate");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Rate to $Q{USSD_DEST} is \$ $rate") if $rate=~/\d/;
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Callback rate to $Q{USSD_DEST}: \$ $rate. Extra: ".$Q{iot_charge}/0.63) if $rate=~/\d/;
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"Sorry, number offline") if $msrn=~/OFFLINE/;
 		return "USSD 0";
 	}#case 126
@@ -694,35 +730,23 @@ $CODE=CURL('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_
 			else{#else check activation
 			&response('LOG','SIG-USSD-CFU-REQUEST',"Code processing $Q{USSD_CODE} $Q{USSD_DEST}");
 				my $SQL=qq[SELECT get_cfu_text("$Q{imsi}",'active',NULL)];
-				my @SQL_result=&SQL($SQL);
-				my $TEXT_result=$SQL_result[0]; 
+#				my @SQL_result=&SQL($SQL);
+				my $TEXT_result=${SQL("$SQL",2)}[0]; 
 				print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"$TEXT_result");
 				&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'RSP',"$Q{USSD_CODE} $Q{USSD_DEST}");
-				return "USSD $#SQL_result";
+				return "USSD $TEXT_result";
 				}
 	}#case 127
 ###
-	case "128"{#country rates request
-		&response('LOG','SIG-COUNTRY-RATES-REQUEST',"$Q{USSD_CODE}");
+	case "128"{#local call request
+		&response('LOG','SIG-LOCAL-CALL-REQUEST',"$Q{USSD_CODE}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE}],1)}[0]);
-		my $USSD_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('mcc_new',"$Q{imsi}",NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
-		#my $SQL_result=&LU_H(1);
-		return 'USSD $SQL_result';
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq["$Q{imsi}",'ussd',$Q{USSD_CODE},NULL],1)}[0]);
+		return 'USSD 0';
 	}#case 128
-	case "129"{#ussd codes request
-		&response('LOG','SIG-USSD-CODES-REQUEST',"$Q{USSD_CODE}");
-		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[NULL,'ussd',$Q{USSD_CODE}],1)}[0]);
-		my $SMSMT_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('get_ussd_codes',NULL,NULL,"$Q{msisdn}",'ruimtools',NULL)],2)}[0]);
-		return "USSD $SMSMT_result";
-	}#case 129
-	
 ###
 	else{#switch ussd code
-		&response('LOG','SIG-USSD-UNKNOWN-REQUEST',"$Q{USSD_CODE}");
-		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'ERROR',"$Q{USSD_CODE}");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},"UNKNOWN USSD REQUEST");
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq["$Q{imsi}",'ussd',$Q{USSD_CODE},NULL],1)}[0]);
 	return 'USSD -3';
 	}#end else switch ussd code (no code defined)
 }#end switch ussd code
@@ -834,12 +858,12 @@ switch ($Q{code}){
 	case 'load_cache'{#load cache
 		my $cache=db_cache();
 		$result=$cache;
-		}#case set debug
+		}#case load cache
 	case 'cb_status'{#set status of callback
 		$result=${SQL(qq[UPDATE cc_callback_spool set status="$Q{options}",manager_result="$Q{options1}" WHERE uniqueid="$Q{sub_code}"],2)}[0];
 		&response('LOG','RC-API-CB-STATUS',"$Q{options1} $result");
 		print $new_sock "$Q{sub_code} $result";
-		}#case set debug
+		}#case cb_status
 	else {
 		&response('LOG','RC-API-CMD-UNKNOWN',"$Q{code}");
 		&response('LOGDB','API-CMD',"$Q{transactionid}","$Q{imsi}",'ERROR',"$Q{code}");
@@ -864,9 +888,14 @@ my $CURL_result;
 my $ussd_code='CB' if $Q{USSD_CODE}=~/111|112/;
 $ussd_code='UD' if $Q{USSD_CODE}!~/111|112|LU/;
 $ussd_code=$Q{request_type} if $Q{request_type}=~/CDR|POSTDATA|DataAUTH|SMS/;
+my ($OPT1,$OPT2);
+$OPT1=$Q{USSD_CODE};
+$OPT2="$Q{USSD_DEST};$Q{iot};$Q{iot_charge}";
+$OPT1=$Q{mnc} if $Q{request_type}=~/LU/;
+$OPT2=$Q{mcc} if $Q{request_type}=~/LU/;
 #if (($agent_key)&&($agent_addr)){#if found key and address
 		&response('LOG',"AGENT-REQUEST-$ussd_code","$Q{SUB_AGENT_ID}");
-$CURL_result=CURL("SIG_SendAgent_$ussd_code",${SQL(qq[SELECT get_uri2("SIG_SendAgent_$ussd_code","$Q{imsi}","$Q{SUB_AGENT_ADDR}",NULL,"$Q{USSD_CODE}","$Q{USSD_DEST}")],2)}[0]);
+$CURL_result=CURL("SIG_SendAgent_$ussd_code",${SQL(qq[SELECT get_uri2("SIG_SendAgent_$ussd_code","$Q{imsi}","$Q{SUB_AGENT_ADDR}",NULL,"$OPT1","$OPT2")],2)}[0]);
 		my $bill_result=${SQL(qq[select bill_agent($Q{SUB_AGENT_ID},"SIG_SendAgent_$ussd_code")],2)}[0];
 		&response('LOG',"AGENT-RESPONSE-$ussd_code","$CURL_result");
 return $CURL_result;
@@ -948,6 +977,19 @@ else{#else if auth
 	my $SMSMT_result=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2("pmnt_$SQL_T_result","$CARD_NUMBER",NULL,NULL,"$CARD_NUMBER","$REQUEST->{payment}{id}")],2)}[0]);
 	return $SQL_T_result;
 }## END sub PAYMNT ##################################################################
+#
+########################### PAYPAL section ############################################
+sub PAYPAL{
+#my $result=-1;
+$Q{custom}=~/(\d{10})/;
+my $SQL=qq[INSERT INTO cc_paypal (mc_gross,item_number,tax,payer_id,payment_status,first_name,mc_fee,personal_number,business,num_cart_items,payer_email,btn_id1,txn_id,payment_type,last_name,item_name,receiver_email,payment_fee,quantity,receiver_id,txn_type,mc_gross_1,mc_currency,residence_country,transaction_subject,payment_gross,ipn_track_id) values ("$Q{mc_gross}","$Q{item_number1}","$Q{tax}","$Q{payer_id}","$Q{payment_status}","$Q{first_name}","$Q{mc_fee}","$1","$Q{business}","$Q{num_cart_items}","$Q{payer_email}","$Q{btn_id1}","$Q{txn_id}","$Q{payment_type}","$Q{last_name}","$Q{item_name1}","$Q{receiver_email}","$Q{payment_fee}","$Q{quantity1}","$Q{receiver_id}","$Q{txn_type}","$Q{mc_gross_1}","$Q{mc_currency}","$Q{residence_country}","$Q{transaction_subject}","$Q{payment_gross}","$Q{ipn_track_id}")];
+my $result=SQL($SQL);
+#my $result= ${SQL(qq[SELECT pay_pal("$Q{txn_id}")])}[0] if SQL($SQL)>0;
+&response('LOG','PAYPAL-RESULT',"$result");
+&response('LOGDB',"PAYPAL","$Q{txn_id}","$Q{btn_id1}",'RESULT',"$result");
+return $result;
+}#PAYPAL
+## END sub PAYPAL ##################################################################		
 #
 ########################### SMS section ############################################
 ### sub SMS ########################################################################
