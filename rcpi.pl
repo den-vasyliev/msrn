@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 200113rev.55.0 STABLE +PAYPAL +CALL +DLMNT';
+my $REV='API Server 220113rev.55.0 STABLE +PAYPAL +CALL +DLMNT +INTER -985-1152-744';
 ##
 #################################################################
 ## 
@@ -118,7 +118,7 @@ our $xs = XML::Simple->new(ForceArray => 0,KeyAttr    => {});
 #################################################################
 #
 ########## SYSTEM PROMPTS #######################################
-our %SYS=(0=>'CARD CANCELED',1=>'ACTIVE',2=>'NEW CARD. WAIT FOR REGISTRATION',3=>'WAITING CONFIRMATION',4=>'CARD RESERVED',5=>'CARD EXPIRED',6=>'CARD SUSPENDED FOR UNDERPAYMENT',9=>'RESALE');
+our %SYS=(0=>'CARD CANCELED',1=>'ACTIVE',2=>'NEW CARD. WAITING FOR REGISTRATION',3=>'WAITING CONFIRMATION',4=>'NEW CARD. WAITING FOR ACTIVATION',5=>'CARD EXPIRED',6=>'PLEASE REFILL YOUR BALANCE',9=>'RESALE');
 our %reason=(0 => 'no such extension or number',1 => 'no answer',2 => 'local ring',3 => 'ring',4 => 'answered',5 => 'busy',6 => 'off hook',7 => 'line off hook',8 => 'circuits busy');
 #################################################################
 #
@@ -574,16 +574,40 @@ my $TMPDIR="/opt/ruimtools/tmp";
 my $CALLDIR="/var/spool/asterisk/outgoing";
 my $msisdn=uri_unescape($Q{msisdn});
 my $uniqueid=timelocal(localtime())."-".int(rand(1000000));
-$Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{7,15})$/;
-$Q{USSD_DEST}=$2;
-&response('LOG','SPOOL-GET-DEST',"$Q{USSD_DEST}");
-&response('LOGDB','SPOOL',"$Q{transactionid}","$Q{imsi}",'CALL',"$msisdn to $Q{USSD_DEST}");
+my $USSD_dest=$Q{USSD_DEST};
 #
-if ($Q{USSD_DEST}){#if correct destination number
-my $msrn=CURL('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
-my $offline=1 if $msrn eq 'OFFLINE';
+if($Q{USSD_DEST}=~/^([3-4][6-9]\d{3})$/){#if internal call
+	if ($Q{imsi} eq "2341800001".$1){#self call
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL("SELECT get_text(NULL,'spool','dest_self',NULL)",2)}[0]);
+		return "SPOOL WARN -4";
+	}#if self call
+#
+my $msrn=CURL('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"2341800001$1",NULL,NULL,NULL,NULL)],2)}[0]);
 $msrn=~s/\+//;#supress \+ from xml response
 &response('LOG','SPOOL-GET-MSRN-RESULT',$msrn);
+#
+	if ($msrn eq 'OFFLINE'){#if dest offline
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL("SELECT get_text(NULL,'spool','dest_offline',NULL)",2)}[0]);
+		return "SPOOL WARN -5";
+	}#if offline
+#
+if ($msrn=~/\d{7,15}/){$Q{USSD_DEST}=$msrn}else{$Q{USSD_DEST}=0;}#set dest or 0 in empty msrn  
+}#if internal call
+#
+elsif ($Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{7,15})$/){#check dest
+	$Q{USSD_DEST}=$2;#set dest
+}#elsif out call
+else {#else incorrect dest
+$Q{USSD_DEST}=0;
+}
+	&response('LOG','SPOOL-GET-DEST',"$Q{USSD_DEST} in $USSD_dest");
+	&response('LOGDB','SPOOL',"$Q{transactionid}","$Q{imsi}",'CALL',"$msisdn to $Q{USSD_DEST} in $USSD_dest");
+#
+if ($Q{USSD_DEST}){#if correct destination number
+	my $msrn=CURL('SIG_GetMSRN',${SQL(qq[SELECT get_uri2('SIG_GetMSRN',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
+	my $offline=1 if $msrn eq 'OFFLINE';
+	$msrn=~s/\+//;#supress \+ from xml response
+	&response('LOG','SPOOL-GET-MSRN-RESULT',$msrn);
 #
 if (($msrn=~/\d{7,15}/)and(!$offline)){
 ## Call SPOOL	
@@ -620,7 +644,7 @@ print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq[se
 		}#else not msrn and dest
 }#if dest
 else{
-		&response('LOGDB','SPOOL',"$Q{transactionid}","$Q{imsi}",'ERROR',"MISSING DEST $Q{USSD_DEST}");
+		&response('LOGDB','SPOOL',"$Q{transactionid}","$Q{imsi}",'ERROR',"MISSING DEST $USSD_dest");
 		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL("SELECT get_text(NULL,'spool','nodest',NULL)",2)}[0]);
 		return 'SPOOL WARN -3';
 }#else dest	
@@ -741,7 +765,7 @@ $CODE=CURL('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$CFU_
 	case "128"{#local call request
 		&response('LOG','SIG-LOCAL-CALL-REQUEST',"$Q{USSD_CODE}");
 		&response('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
-		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq["$Q{imsi}",'ussd',$Q{USSD_CODE},NULL],1)}[0]);
+		print $new_sock &response('auth_callback_sig','OK',$Q{transactionid},${SQL(qq["$Q{imsi}",'ussd',$Q{USSD_CODE},$Q{mcc}],1)}[0]);
 		return 'USSD 0';
 	}#case 128
 ###
@@ -981,8 +1005,8 @@ else{#else if auth
 ########################### PAYPAL section ############################################
 sub PAYPAL{
 #my $result=-1;
-$Q{custom}=~/(\d{10})/;
-my $SQL=qq[INSERT INTO cc_paypal (mc_gross,item_number,tax,payer_id,payment_status,first_name,mc_fee,personal_number,business,num_cart_items,payer_email,btn_id1,txn_id,payment_type,last_name,item_name,receiver_email,payment_fee,quantity,receiver_id,txn_type,mc_gross_1,mc_currency,residence_country,transaction_subject,payment_gross,ipn_track_id) values ("$Q{mc_gross}","$Q{item_number1}","$Q{tax}","$Q{payer_id}","$Q{payment_status}","$Q{first_name}","$Q{mc_fee}","$1","$Q{business}","$Q{num_cart_items}","$Q{payer_email}","$Q{btn_id1}","$Q{txn_id}","$Q{payment_type}","$Q{last_name}","$Q{item_name1}","$Q{receiver_email}","$Q{payment_fee}","$Q{quantity1}","$Q{receiver_id}","$Q{txn_type}","$Q{mc_gross_1}","$Q{mc_currency}","$Q{residence_country}","$Q{transaction_subject}","$Q{payment_gross}","$Q{ipn_track_id}")];
+$Q{memo}=~/(\d{10})/;
+my $SQL=qq[INSERT INTO cc_paypal (mc_gross,item_number,tax,payer_id,payment_status,first_name,mc_fee,personal_number,business,num_cart_items,payer_email,btn_id1,txn_id,payment_type,last_name,item_name,receiver_email,payment_fee,quantity,receiver_id,txn_type,mc_gross_1,mc_currency,residence_country,transaction_subject,payment_gross,ipn_track_id) values ("$Q{mc_gross}","$Q{item_number}","$Q{tax}","$Q{payer_id}","$Q{payment_status}","$Q{first_name}","$Q{mc_fee}","$1","$Q{business}","$Q{num_cart_items}","$Q{payer_email}","$Q{btn_id}","$Q{txn_id}","$Q{payment_type}","$Q{last_name}","$Q{item_name}","$Q{receiver_email}","$Q{payment_fee}","$Q{quantity}","$Q{receiver_id}","$Q{txn_type}","$Q{mc_gross}","$Q{mc_currency}","$Q{residence_country}","$Q{transaction_subject}","$Q{payment_gross}","$Q{ipn_track_id}")];
 my $result=SQL($SQL);
 #my $result= ${SQL(qq[SELECT pay_pal("$Q{txn_id}")])}[0] if SQL($SQL)>0;
 &response('LOG','PAYPAL-RESULT',"$result");
@@ -1149,6 +1173,7 @@ use vars qw(%Q);
 my $SQL=qq[UPDATE cc_card set phone="$Q{msisdn}" where useralias=$Q{imsi} or firstname=$Q{imsi}];
 my $sql_result=&SQL($SQL);
 print $new_sock &response('msisdn_allocation','OK',$Q{transactionid},$sql_result);
+my $new_user=CURL('new_user',${SQL(qq[SELECT get_uri2('new_user',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
 &response('LOG','msisdn_allocation',$sql_result);
 &response('LOGDB','msisdn_allocation',1,$Q{imsi},'RSP',"$Q{msisdn} $sql_result");	
 }#end sub msisdn_allocation #######################################################
