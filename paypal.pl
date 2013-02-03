@@ -1,5 +1,9 @@
 #!/usr/bin/perl
-#
+##
+# callme!! -  callme_1358797364_biz@gmail.com
+# denis_user - den.va_1358781520_per@gmail.com den.vasyliev@gmail.com
+# Visa   4503056978636302 Exp Date:  1/2018
+##
 use LWP::UserAgent 6;
 #
 $LOGFILE='/opt/ruimtools/log/paypal.log';
