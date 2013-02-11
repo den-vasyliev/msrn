@@ -5,11 +5,13 @@
 # Visa   4503056978636302 Exp Date:  1/2018
 ##
 use LWP::UserAgent 6;
+use Time::Local;
 #
 $LOGFILE='/opt/ruimtools/log/paypal.log';
 #
 ## LOGG ######################################
 sub logg{
+$now=localtime;
 my $MESSAGE=$_[0];
 open(LOGFILE,">>","$LOGFILE") or die $!;
 my $LOG="[$now]-[API-LOG]: $MESSAGE\n";	
@@ -27,9 +29,9 @@ $query .= '&cmd=_notify-validate';
 #
 # post back to PayPal system to validate
 $ua = LWP::UserAgent->new(ssl_opts => { verify_hostname => 1 });
-$req = HTTP::Request->new('POST', 'https://www.sandbox.paypal.com/cgi-bin/webscr');
+$req = HTTP::Request->new('POST', 'https://www.paypal.com/cgi-bin/webscr');
 $req->content_type('application/x-www-form-urlencoded');
-$req->header(Host => 'www.sandbox.paypal.com');
+$req->header(Host => 'www.paypal.com');
 $req->content($query);
 $res = $ua->request($req);
 #
@@ -76,11 +78,14 @@ logg(@XML);
 &logg("CHECK EMAIL $receiver_email");
  # check that $payment_amount/$payment_currency are correct
 &logg("CHECK AMOUNT $payment_amount/$payment_currency");
+#send email notification
+$email_pri=`echo "$item_name $payment_status $txn_id $payment_amount/$payment_currency" | mail -s 'New payment $txn_id $item_name' denis\@ruimtools.com -- -F "CallMe! New Payment" -f no-reply\@callme.ruimtools.com`;
  # process payment
 }
 elsif ($res->content eq 'INVALID') {
  # log for manual investigation
 &logg("ERROR CONTENT");
+$email_pri=`echo "Error payment validation" | mail -s 'Error payment $txn_id $item_name' denis\@ruimtools.com -- -F "CallMe! Error Payment" -f no-reply\@callme.ruimtools.com`;
 }
 else {
  # error
