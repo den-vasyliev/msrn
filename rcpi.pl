@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $REV='API Server 030213.2138-rev.57.0 STABLE -853';
+my $REV='API Server 110213.0050-rev.58.0 +STAT +853 +967 ~1073 ~1066 ~1057';
 ##
 #################################################################
 ## 
@@ -20,8 +20,6 @@ use Digest::SHA qw(hmac_sha512_hex);
 use Digest::MD5 qw(md5);
 use URI::Escape;
 use Email::Valid;
-#use LWP::UserAgent;
-#use LWP::ConnCache::MaxKeepAliveRequests;
 use Switch;
 use POSIX;
 use Time::Local;
@@ -34,14 +32,14 @@ no warnings 'once';
 ########## END OF MODULES #######################################
 #
 ########## KEYS #############################################
-##system('stty','-echo');
-#print STDOUT "Enter login:\n";
-#chop(my $LOGIN = <STDIN>);
+system('stty','-echo');
+print STDOUT "SELECT SERVER:[lab|pbx]\n";
+chop(my $SERVER = <STDIN>);
 #print STDOUT "Enter passwd:\n";
 #chop(my $PASS = <STDIN>);
 #print STDOUT "Enter key:\n";
 #chop(our $KEY = <STDIN>);
-#system('stty','echo');
+system('stty','echo');
 my($LOGIN,$PASS,$KEY)=('msrn','msrn','ruimt00l$');
 ################################################################
 #
@@ -86,10 +84,10 @@ if(@ARGV){our $debug=$ARGV[0]}else{use vars qw($debug );$debug=1}
 ########## LOG FILE #############################################
 our $LOGFILE = IO::File->new("/opt/ruimtools/log/rcpi.log", "a+");
 ########## CONFIGURATION FOR MAIN SOCKET ########################
-#my $HOST='127.0.0.1';
-my $HOST='10.10.10.2';
+my $HOST;
+$HOST='127.0.0.1' if $SERVER eq 'pbx';
+$HOST='10.10.10.2' if $SERVER eq 'lab';
 my $PORT='35001';
-my $AMI_Port='5038';
 #################################################################
 #
 ########## CONNECT TO MYSQL #####################################
@@ -152,7 +150,7 @@ sub hndl{#thread handle
 #################################################################
 #
 ########## MAIN #################################################
-sub main{
+	sub main{
 #
 use vars qw($REQUEST $INNER_TID $LOGFILE $new_sock %Q $dbh);
 ## CACHED MYSQL CONNECTIONS ##
@@ -163,14 +161,16 @@ our %XML_KEYS=&XML_PARSE($REQUEST,'SIG_Get_KEYS');
 my $qkeys= keys %XML_KEYS;
 &response('LOG','MAIN-PARSER-RETURN',$qkeys);
 	if (keys %XML_KEYS){#if not empty set
+		uri_unescape($Q{calldestination})=~/^\*(\d{3})(\*|\#)(\D{0,}\d{0,}).?(.{0,}).?/ if $Q{calldestination};
 		my $IN_SET='';
-		$IN_SET=uri_unescape($XML_KEYS{msisdn}).":$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}" if  $XML_KEYS{msisdn};#General
+		$IN_SET="$1:".uri_unescape($XML_KEYS{msisdn}).":$XML_KEYS{mcc}:$XML_KEYS{mnc}:$XML_KEYS{tadig}" if  $XML_KEYS{msisdn};#General
 		$IN_SET=$IN_SET.":$XML_KEYS{code}:$XML_KEYS{sub_code}" if $XML_KEYS{code};#USSD
 		$IN_SET=$IN_SET."$XML_KEYS{ident}:$XML_KEYS{amount}" if $XML_KEYS{salt};#PAYMNT
 		$IN_SET=$IN_SET."$XML_KEYS{TotalCurrentByteLimit}" if $XML_KEYS{SessionID};#PAYMNT
-		$IN_SET=$IN_SET."$XML_KEYS{calllegid}:$XML_KEYS{bytes}:$XML_KEYS{seconds}:$XML_KEYS{mnc}:$XML_KEYS{mcc}:$XML_KEYS{amount}" if $XML_KEYS{calllegid};#DATA
+$IN_SET=$IN_SET."$XML_KEYS{calllegid}:$XML_KEYS{bytes}:$XML_KEYS{seconds}:$XML_KEYS{mnc}:$XML_KEYS{mcc}:$XML_KEYS{amount}" if $XML_KEYS{calllegid};#DATA
 		$XML_KEYS{transactionid}=$XML_KEYS{SessionID} if $XML_KEYS{SessionID};#DATA
 		$XML_KEYS{imsi}=$XML_KEYS{GlobalIMSI} if $XML_KEYS{SessionID};#DATA
+#		
 		my $ACTION_TYPE_RESULT=&GET_TYPE($XML_KEYS{request_type});#get action type
 #
 		eval {#save subref
@@ -380,7 +380,7 @@ switch ($REQUEST_OPTION){
 sub GET_TYPE{
 use vars qw(%Q %CACHE);
 my $request_type=$_[0];
-my @action_item=values $CACHE{$request_type}{'request'};
+my @action_item=values $CACHE{$request_type}{'request'} if $CACHE{$request_type}{'request'};
 our $PASS=1;
 #
 foreach my $item(keys %Q){
@@ -964,7 +964,7 @@ $OPT2=$Q{mcc} if $Q{request_type}=~/LU/;
 $CURL_result=CURL("SIG_SendAgent_$ussd_code",${SQL(qq[SELECT get_uri2("SIG_SendAgent_$ussd_code","$Q{imsi}","$Q{SUB_AGENT_ADDR}",NULL,"$OPT1","$OPT2")],2)}[0]);
 		my $bill_result=${SQL(qq[select bill_agent($Q{SUB_AGENT_ID},"SIG_SendAgent_$ussd_code")],2)}[0];
 		&response('LOG',"AGENT-RESPONSE-$ussd_code","$CURL_result");
-return $CURL_result;
+return "agent:$Q{SUB_AGENT_ID} $Q{USSD_CODE} $CURL_result";
 }# END sub AGENT
 ##################################################################
 #
@@ -1054,7 +1054,7 @@ $Q{receipt_id}=$Q{txn_id} if !$Q{receipt_id};
 foreach my $memo(@Memo){
 	my $result=""; 
 	next if $memo eq ""; 
-	if ($memo=~/(\w{3,}\.?\@.*\.\w{2,3})/) {$email=Email::Valid->address(-address  => $1, -tldcheck => 1); next} 
+	if ($memo=~/([_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4}))/) {$email=Email::Valid->address(-address  => $1, -tldcheck => 1); next} 
 	if ($memo=~/\+?(\d{11,15})/){ $rcpt=$1; next} 
 	if($memo=~/(\d{10})/){$Q{'personal_number'}=$1; next}
 }#foreach
@@ -1063,23 +1063,23 @@ my $SQL=qq[INSERT INTO cc_paypal (memo,mc_gross,item_number,tax,payer_id,payment
 my $result=SQL($SQL);
 #
 &response('LOG','PAYPAL-RESULT',"$result");
-&response('LOGDB',"PAYPAL","$Q{txn_id}","$Q{btn_id1}",'RESULT',"$result");
+&response('LOGDB',"PAYPAL","$Q{txn_id}","$Q{btn_id}",'RESULT',"$result");
 #
 #send payment confirmation to email
 #
 if ($Q{payer_email}){
-$email_text=uri_unescape(${SQL(qq[SELECT paypal("$Q{txn_id}")],2)}[0]);
+$email_text=uri_unescape(${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],2)}[0]);
 eval {use vars qw(%Q $email $email_pri $email_text);&response('LOG','PAYPAL-GET-EMAIL',"$Q{receipt_id} $Q{payer_email} $email");
-$email_pri=`echo "$email_text" | mail -s 'Your payment $Q{receipt_id} confirmed' $Q{payer_email} $email -- -F "CallMe! Payment" -f no-reply\@callme.ruimtools.com`;
+$email_pri=`echo "$email_text" | mail -s 'Payment $Q{receipt_id}' $Q{payer_email} $email -- -F "RuimTools Payment" -f support\@ruimtools.com`;
 };warn $@ if $@;  &response('LOG',"PAYPAL-SEND-EMAIL-ERROR","$@") if $@;
 }#if email
 else{$email_pri="No email address"}#else email empty
 #
 &response('LOG','PAYPAL-SEND-EMAIL',"$email_pri");
 # send sms notification to primary phone number
-my $sms_pri=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('SIG_SendSMSMT',NULL,"${SQL(qq[SELECT phone FROM cc_card WHERE username=$Q{'personal_number'}],2)}[0]","ruimtools",NULL,"${SQL(qq[SELECT paypal("$Q{txn_id}")],2)}[0]")],2)}[0]) if $Q{'personal_number'};
+my $sms_pri=CURL('SIG_SendSMSMT',${SQL(qq[SELECT get_uri2('SIG_SendSMSMT',NULL,"${SQL(qq[SELECT phone FROM cc_card WHERE username=$Q{'personal_number'}],2)}[0]","ruimtools",NULL,"${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],2)}[0]")],2)}[0]) if $Q{'personal_number'};
 # send sms notification to additional phone number
-my $sms_add=CURL('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$rcpt","+447700079964","ruimtools","${SQL(qq[SELECT paypal("$Q{txn_id}")],2)}[0]")],2)}[0]) if $rcpt;
+my $sms_add=CURL('SIG_SendSMSMO',${SQL(qq[SELECT get_uri2('SIG_SendSMSMO',NULL,"+$rcpt","+447700079964","ruimtools","${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],2)}[0]")],2)}[0]) if $rcpt;
 #
 &response('LOG','PAYPAL-SEND-RESULT',"$rcpt $sms_pri $sms_add");
 ##
