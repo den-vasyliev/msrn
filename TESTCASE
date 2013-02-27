@@ -23,7 +23,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=SMSContent_CDR;sms_type=MO;ti
 ### END SMSContent_CDR
 #
 sub GET DID {}
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&code=get_did&rdnis=${CALLERID(rdnis)}&transactionid=6758765&agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5&options=cleartext'
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&code=get_did&rdnis=380947111708&transactionid=6758765&agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5&options=cleartext'
 ### END SUB GET DID
 #
 sub AGENT CALL GRP + CFU CHECK {}
@@ -33,7 +33,7 @@ sub AGENT CALL GRP + CFU CHECK {}
 # CFU seria == 2
 # Return msrn & session limit
 ###
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&imsi=234180000139868&code=get_msrn&transactionid=100&agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5&options=cleartext'
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd&imsi=234180000139868&code=get_msrn&transactionid=1000&agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5&options=cleartext'
 ### END AGENT CALL GRP
 #
 #sub DEPRECATED CMD Get Rate to Dest get_rate {}
@@ -71,7 +71,7 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;code=ping;agent=RU
 #
 sub SIG LU_CDR {}
 #
-curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079965;vlr=%2B380672054436;imsi=234180000146676;mcc=520;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079965;vlr=%2B380672054436;imsi=234180000139868;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
 <?xml version="1.0" ?><CDR_response><cdr_id>59526930</cdr_id><cdr_status>1</cdr_status></CDR_response>
 #
 curl 'http://127.0.0.1:8008/roamingcenter/?request_type=LU_CDR;timestamp=2012-05-18%2006%3A59%3A18;msisdn=%2B447700079964;vlr=%2B380672054436;imsi=234180000079890;mcc=255;mnc=03;carrierid=;transactionid=194872;tadig=TEST;errorcode=0;cdr_id=59526930'
@@ -83,7 +83,7 @@ curl 'http://127.0.0.1:8080/api?calldestination=%2A100%23;timestamp=2012-05-18%2
 
 curl 'http://127.0.0.1:8008/roamingcenter/?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=23418000037960[1-9];transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379605;iccid=89234189720000000088'
 
-curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379605;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=228;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379605;iccid=89234189720000000088'
+curl 'http://127.0.0.1/cgi-bin/api.pl?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000139868;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=228;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379605;iccid=89234189720000000088'
 #<?xml version="1.0" ?><MOC_response><transaction_id>184863</transaction_id><display_message>Unknown USSD request</display_message></MOC_response>
 #
 curl 'http://127.0.0.1:8008/roamingcenter/?calldestination=%2A100%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000079890;transactionid=184863;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700079964;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700079964;globalimsi=234180000379608;iccid=89234189720000000088'
@@ -120,17 +120,19 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?card_number=9671645459'
 #
 sub MSISDN allocation {}
 #
+http://127.0.0.1/cgi-bin/api.pl?request_type=msisdn_allocation;cdr_id=43137;timestamp=2012-05-22%2007%3A47%3A35;carrierid=;IMSI=234180000379608;MSISDN=447700079965
+
 curl "http://127.0.0.1/cgi-bin/api.pl?request_type=msisdn_allocation;cdr_id=43137;timestamp=2012-05-22%2007%3A47%3A35;carrierid=;IMSI=234180000379605;MSISDN=447700079965"
 ### END MSISDN allocation
 #
 sub DataAUTH {}
 #
-curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000139868;MCC=260;MNC=002;TotalCurrentByteLimit=1048576;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000379605;ICCID=8923418972000000005"
+curl "http://127.0.0.1/cgi-bin/api.pl?request_type=DataAUTH;CallID=67100200;MSISDN=447700055498;IMSI=234180000139868;MCC=260;MNC=002;TotalCurrentByteLimit=1048576;AgentID=1024;SessionID=3901571;GlobalMSISDN=447700055498;GlobalIMSI=234180000139868;ICCID=8923418972000000005"
 ### END DataAUTH
 #
 sub SMS MT {}
 #
-curl "http://127.0.0.1/cgi-bin/api.pl?timestamp2012-06-23%2017%3A56%3A11=;imsi=234180000379605;transactionid=114927;destination=447700079964;from=393358840009361;mcc=255;mnc=03;request_type=MT_SMS;user_balance=0.0000;carrierid=;tadig=UKRKS;globalmsisdn=447700079964;globalimsi=234180000379605;iccid=89234189720000000058"
+curl "http://127.0.0.1/cgi-bin/api.pl?timestamp2012-06-23%2017%3A56%3A11=;imsi=234180000139868;transactionid=114927;destination=447700079964;from=393358840009361;mcc=255;mnc=03;request_type=MT_SMS;user_balance=0.0000;carrierid=;tadig=UKRKS;globalmsisdn=447700079964;globalimsi=234180000379605;iccid=89234189720000000058"
 ### END SMS MT
 #
 sub SMS Content CDR {}
@@ -174,7 +176,7 @@ sub GET SESSION TIME TO DEST FROM CN {} (!) with out international code
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=380674014759;imsi=234180000379605;code=get_session_time;transactionid=321;agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5'
 ### END GET SESSION TIME TO DEST FROM CN
 #
-sub GET RESELLER MSRN {}
+sub GET MSRN {}
 #
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=1;imsi=;code=get_msrn;sub_code=0;transactionid=999;agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5'
 ### END RESELLER MSRN
@@ -182,6 +184,10 @@ curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=1;imsi=;cod
 sub CMD SEND USSD {}
 #
 curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=%2B447700027833;code=send_ussd;sub_code=Your%20balanсe%20was%20updated;agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5'
+## STAT
+curl 'http://127.0.0.1/cgi-bin/api.pl?request_type=rc_api_cmd;msisdn=1359572892.1421;code=send_ussd;sub_code=stat;agent=RUIMTOOLS;auth_key=17b9490d926b314b54189e1d71f95745a7272a8af30b37d6ca6de37567dcff3b7224a3c4235cbe111478987e2a52a43180b74b6672de8bf22885563620b4f5f5'
+#SELECT CONCAT(REPLACE(REPLACE(a.response,'_TIME_',sessiontime),'_BILL_',round(sum(sessionbill),2))) stat from cc_actions a, cc_card c, cc_call cc WHERE c.id=cc.card_id and cc.uniqueid='1359893998.1448' and a.code='send_ussd_stat' limit 1
+
 #<?xml version="1.0" ?><API_response><transaction_id>0</transaction_id><display_message>PING OK</display_message></API_response>
 ### END CMD SEND USSD
 #
