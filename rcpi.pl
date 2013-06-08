@@ -40,7 +40,7 @@ chop(my $SERVER = <STDIN>);
 #print STDOUT "Enter key:\n";
 #chop(our $KEY = <STDIN>);
 system('stty','echo');
-my($LOGIN,$PASS,$KEY)=('msrn','msrn','ruimt00l$');
+my($LOGIN,$PASS,$KEY)=('msrn','ca11me!','ruimt00l$');
 ################################################################
 #
 #################################################################
