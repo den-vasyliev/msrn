@@ -4,38 +4,17 @@
 # Test Cases for RCPI SERVER 270612.rev.18.0
 #
 ####################################################
-1) "login"
- 2) "pass"
- 3) "host"
- 4) "port"
- 5) "debug"
- 6) "max-call-time"
- 7) "ready_count"
- 8) "call_count"
- 9) "min_ready_count"
-10) "redis_sync_timeout"
-11) "redis_keep_sync"
-12) "max_request_count"
-13) "page404"
-1372643472.233602 [0 127.0.0.1:51541] "hvals" "CONF"
- 1) "msrn"
- 2) "ca11me!"
- 3) "127.0.0.1"
- 4) "35001"
- 5) "4"
- 6) "1200"
- 7) "0"
- 8) "100"
- 9) "10"
-10) "5"
-11) "1"
-12) "100"
-13) "Not found"
-#
 #
 <?xml version="1.0"?><Wire9_data><MSRN_Response><HLR_ID>2532</HLR_ID><IMSI>234180000000000</IMSI><MCC>234</MCC><MNC>18</MNC><MSISDN>+447700000000</MSISDN><MSRN>+447872201220</MSRN><REQUEST_STATUS>1</REQUEST_STATUS><TIME_STAMP>2012-10-17 11:54:45</TIME_STAMP><TRANSACTION_ID>1000</TRANSACTION_ID><USER_BALANCE>0.0000</USER_BALANCE><TADIG>GBWC9</TADIG><IOT>0</IOT><IOT_CHARGE>0.0000</IOT_CHARGE></MSRN_Response></Wire9_data>
 
-<?xml version="1.0"?><CB_data><RESALE_Response><RESPONSE>Calling 380674014759...</RESPONSE><TID>23411</TID><IMSI>234180000379608</IMSI></RESALE_Response></CB_data>
+<?xml version="1.0"?>
+	<CB_data>
+		<RESALE_Response>
+			<RESPONSE>Calling 380674014759...</RESPONSE>
+			<TID>23411</TID>
+			<IMSI>234180000379608</IMSI>
+		</RESALE_Response>
+	</CB_data>
 
 <?xml version="1.0"?>
 	<api_cmd>
@@ -44,24 +23,22 @@
 		<auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key>
 		<transactionid>1000<transactionid>
 	</api_cmd>
-
-curl -d '<?xml version="1.0"?><api><api_cmd><code>ping</code><agent>CALLME</agent><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key><transactionid>1000</transactionid></api_cmd></api>' http://127.0.0.1
-
+#
+curl -d '<?xml version="1.0"?><api><api_cmd><code>pi</code><agent>CALLME</agent><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key><transactionid>1000</transactionid></api_cmd></api>' http://127.0.0.1
+#
 curl -d '<?xml version="1.0"?><api><api_cmd><code>stat</code><date>2013-06</date><agent>CALLME</agent><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key><transactionid>1000</transactionid></api_cmd></api>' http://127.0.0.1
-
+#
 curl -d '<?xml version="1.0"?><api><api_cmd><code>stat</code><imsi>234180000379604</imsi><date>2013-0</date><agent>CALLME</agent><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key><transactionid>1000</transactionid></api_cmd></api>' http://127.0.0.1
-
+#
 curl -d '<?xml version="1.0"?><api><api_cmd><code>get_msrn</code><agent>CALLME</agent><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key><transactionid>1000</transactionid><imsi>234180000379604</imsi></api_cmd></api>' http://127.0.0.1
-
+#
 curl -d 'request_type=api_cmd;msisdn=1;imsi=234180000379604;code=get_msrn;sub_code=0;transactionid=999;agent=CALLME;auth_key=fa9fec615bf0b68aa631c68b0f85628d' http://127.0.0.1
-
-curl -d '<?xml version="1.0"?><api><ai_cmd><code>pin</code><agent>CALLME</agent><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key><transactionid>1000</transactionid></api_cmd></api>' http://127.0.0.1
-
+#
 curl 'http://127.0.0.1?calldestination=%2A112%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000139868;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700055360;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379605;iccid=89234189720000000005'
-
+#
 Card Number:{$SUB_CN} Phone:{$SUB_DID} Inter:{$SUB_INTER} SMS:{$globalmsisdn} Balance:${$SUB_CREDIT}
 #
-curl -d 'calldestination=%2A112%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000139868;transactionid=000000;request_type=auth_callback_sig;mcc=255;mnc=03;tadig=TEST;iot=0;iot_charge=0.0000' http://127.0.0.1
+curl -d 'calldestination=%2A100%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000139868;transactionid=000000;request_type=auth_callback_sig;mcc=255;mnc=03;tadig=TEST;iot=0;iot_charge=0.0000' http://127.0.0.1
 #
 curl 'http://127.0.0.1?calldestination=%2A100%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379604;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=302;mnc=220;msisdn=%2B447700055360;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379605;iccid=89234189720000000005'
 #
@@ -73,7 +50,7 @@ curl -k -d 'calldestination=%2A110%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=2
 #
 curl -k -d 'calldestination=%2A125%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000139868;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' https://127.0.0.1
 #
-curl -k -d 'calldestination=%2A111%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379604;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' https://127.0.0.1
+curl -k -d 'calldestination=%2A111%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000139868;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' https://127.0.0.1
 #
 sub SIG CALLBACK {}
 #
