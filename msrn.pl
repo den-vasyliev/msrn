@@ -5,7 +5,7 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $rev='MSRN.ME 110713-rev.71.4 UPPERCASE';
+my $rev='MSRN.ME 120713-rev.71.5';
 ##
 #################################################################
 ## 
@@ -122,6 +122,7 @@ share($CONF{'fake-xml'});
 share($CONF{'fake-agent-xml'});
 share($CONF{'fake-call'});
 share($CONF{'max-call-time'});
+share($CONF{'sms_mt_allow'});
 share($CONF{'ready_count'});
 ##################################################################
 async(\&handler,1);#start redis thread
@@ -342,16 +343,22 @@ switch ($REQUEST_OPTION){
 		return $Q{MSRN};
 	}#msrn
 	case 'send_ussd' {
-		my $USSD=$Q{REQUEST}->{USSD_Response}{REQUEST_STATUS}{value};
-		our $ERROR=$Q{REQUEST}->{Error_Message}{value};
-		logger('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$USSD $ERROR") if $CONF{debug}==4;
-		return $USSD;
+		$Q{STATUS}=$Q{REQUEST}->{USSD_Response}{REQUEST_STATUS}{value};
+		$Q{ERROR}=$Q{REQUEST}->{Error_Message}{value};
+		logger('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$Q{STATUS} $Q{ERROR}") if $CONF{debug}==4;
+		return "$Q{STATUS}$Q{ERROR}";
 	}#ussd
-	case /sms_m/ {
-		my $SMS=$Q{REQUEST}->{SMS_Response}{REQUEST_STATUS}{value};
-		our $ERROR=$Q{REQUEST}->{Error_Message}{value};
-		logger('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$SMS $ERROR") if $CONF{debug}==4;
-		return "$ERROR$SMS";
+#	case /sms_m/ {
+#		my $SMS=$Q{REQUEST}->{SMS_Response}{REQUEST_STATUS}{value};
+#		our $ERROR=$Q{REQUEST}->{Error_Message}{value};
+#		logger('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$SMS $ERROR") if $CONF{debug}==4;
+#		return "$ERROR$SMS";
+#	}#sms
+	case 'send_sms_mt' {
+		$Q{STATUS}=$Q{REQUEST}->{SMS_Response}{REQUEST_STATUS}{value};
+		$Q{ERROR}=$Q{REQUEST}->{Error_Message}{value};
+		logger('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$Q{STATUS} $Q{ERROR}") if $CONF{debug}==4;
+		return "$Q{STATUS}$Q{ERROR}";
 	}#sms
 	case /agent/ {
 		my $RESULT=$Q{REQUEST}->{RESALE_Response}{RESPONSE}{value};
@@ -378,10 +385,10 @@ switch ($REQUEST_OPTION){
 		return "$ERROR$BALANCE";
 	}#set user balance
 	case 'new_user' {
-		my $NEW=$Q{REQUEST}->{Result}{value};
-		our $ERROR=$Q{REQUEST}->{Reason}{value};
-		logger('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$NEW $ERROR") if $CONF{debug}==4;
-		return "$ERROR$NEW";
+		$Q{STATUS}= ref $Q{REQUEST}->{CreateAccount}{Result} eq 'ARRAY' ? $Q{REQUEST}->{CreateAccount}{Result}[0]{value} : $Q{REQUEST}->{CreateAccount}{Result}{value};
+		my $ERROR= ref $Q{REQUEST}->{CreateAccount}{Reason} eq 'ARRAY' ? $Q{REQUEST}->{CreateAccount}{Reason}[1]{value} : $Q{REQUEST}->{CreateAccount}{Reason}{value};
+		logger('LOG',"XML-PARSE-RETURN-$REQUEST_OPTION","$Q{STATUS} $ERROR") if $CONF{debug}==4;
+		return "$Q{STATUS}$ERROR";
 	}#new user
 	case /siminfo/i {
 		$Q{PIN}=$Q{REQUEST}->{Sim}{Password}{value};
@@ -868,7 +875,7 @@ else{# timeout
 ## Return message
 #################################################################
 sub api_cmd{
-if ($Q{AGENT_AUTH}=$R->HGET('AGENT', auth())){logger('LOG','API-CMD',"AUTH OK") if $CONF{debug}==4;}#if auth
+if ($Q{AGENT_AUTH_GRP}=$R->HGET('AGENT', auth())){logger('LOG','API-CMD',"AUTH OK") if $CONF{debug}==4;}#if auth
 elsif($R->EXISTS('SESSION:'.$Q{SESSION})&&$Q{CODE} eq 'ajax'){logger('LOG','API-CMD-AJAX',"AUTH OK") if $CONF{debug}==4;}
 else{
 	logger('LOG','API-CMD',"AUTH ERROR") if $CONF{debug}==4;
@@ -884,7 +891,7 @@ switch ($Q{CODE}){
 	case 'get_msrn' {#GET_MSRN
 		my $msrn;
 		if ($Q{IMSI}){#if imsi defined
-			(my $status,my $code, $Q{MSRN})=CURL('get_msrn',template('get_msrn'));
+			(my $status,my $code, $Q{MSRN})=CURL('get_msrn',template('get_msrn'),$CONF{api_uri});
 			return ('OK', 1,response('get_msrn','OK')) if $Q{OPTIONS} ne 'cleartext';
 			return ('OK',1,response('get_msrn','HTML')) if $Q{OPTIONS} eq 'cleartext';
 		}#if imsi
@@ -909,18 +916,28 @@ switch ($Q{CODE}){
 		#}#if imsi call
 	}#case get_did
 	case 'send_ussd' {#SEND_USSD
-		$result=CURL('send_ussd',${SQL(qq[SELECT get_uri2("$Q{CODE}",NULL,NULL,"$Q{MSISDN}","$Q{SUB_CODE}",NULL)],2)}[0]);
-		return ('OK',1,response('api_response','OK',$Q{TRANSACTIONID},"$Q{MSISDN} $result"));
-		}#case send_ussd
+		if ($Q{SUB_GRP_ID}==$Q{AGENT_AUTH_GRP}&&$Q{USSD_TO} eq $Q{SUB_PHONE}){
+		return ('OK',1,response('api_response','OK',CURL('send_ussd',template('send_ussd'),$CONF{api_uri})));
+	}else{
+		return ('ERROR',1,response('api_response','ERROR','NOT YOUR SIM'));
+	}#else AUTH
+		}#case send_ussd		
+	case 'send_sms' {#SEND SMS MT	
+	if ($Q{SUB_GRP_ID}==$Q{AGENT_AUTH_GRP}&&$Q{SMS_TO} eq $Q{SUB_PHONE}){
+		return ('OK',1,response('api_response','OK',CURL('send_sms_mt',template('send_sms_mt'),$CONF{api_uri})));
+	}else{
+		return ('ERROR',1,response('api_response','ERROR','NOT YOUR SIM'));
+	}#else AUTH
+		}#case send sms mt		
 	case 'ajax' {#AJAX
 		my %HASH=(aaData=>SQL(template('ajax:'.$Q{SUB_CODE}),'ajax'));
 		logger('LOG','API-CMD-AJAX',$Q{SUB_CODE}) if $CONF{debug}==4;
 		return ('OK',1,response('api_response','JSON',\%HASH));
 		}#case ajax
 	case 'set_user' {#API C9
-	if ($Q{SUB_GRP_ID}==$Q{AGENT_AUTH}){		
+	if ($Q{SUB_GRP_ID}==$Q{AGENT_AUTH_GRP}){		
 	$Q{SUB_CODE} = $Q{SUB_CODE} eq 'Enable' ? 1 : $Q{SUB_CODE} eq 'Disable' ? 0 : $Q{SUB_CODE};
-	return ('OK',1, response('api_response','OK',CURL('set_user_status',template('set_user_status')))) if $Q{SUB_CODE}!~/Data/;
+	return ('OK',1, response('api_response','OK',CURL('set_user_status',template('set_user_status'),$CONF{api_uri}))) if $Q{SUB_CODE}!~/Data/;
 	return ('OK',1, response('api_response','OK',CURL('set_user',XML($Q{SUB_CODE}),template('set_user'))));
 	}else{
 	return ('ERROR',1,response('api_response','ERROR','NOT YOUR SIM'));
@@ -956,14 +973,14 @@ return ($result[0],$result[1],response($response_type,$response_options,$result[
 #
 ### SUB AUTH ########################################################
 sub auth{
-logger('LOG',"RC-API-DIGEST-CHECK-[addr/key/agent/token/session]","$Q{REMOTE_ADDR}, $Q{auth_key}, $Q{AGENT}, $Q{TOKEN} - $Q{DIGEST}") if $CONF{debug}==4;
+logger('LOG',"RC-API-DIGEST-CHECK-[addr/key/agent/token/session]","$Q{REMOTE_ADDR}, $Q{AUTH_KEY}, $Q{AGENT}, $Q{TOKEN} - $Q{DIGEST}") if $CONF{debug}==4;
 	$Q{SESSION}=$Q{SESSION} ? $Q{SESSION} :0;
 return 2 if $R->EXPIRE('SESSION:'.$Q{SESSION},300); # index page
 	my	$md5 = Digest::MD5->new;
 	$Q{AGENT} ? $md5->add($Q{REMOTE_ADDR}, $Q{AUTH_KEY}, $Q{AGENT}) : $md5->add($Q{INNER_TID},$Q{REMOTE_ADDR},$Q{TOKEN});
 	$Q{DIGEST} = $md5->hexdigest;
 return $Q{DIGEST} if $Q{AGENT}; # agent
-	$Q{LOGIN_STATUS}= 'Session timeout' if $Q{session}; 
+	$Q{LOGIN_STATUS}= 'Session timeout' if $Q{SESSION}; 
 	$Q{TOKEN}= $Q{TOKEN} ? $Q{TOKEN} :0;
 	$Q{TOKEN}=$R->HEXISTS('TOKEN',$Q{TOKEN});
 	$Q{SESSION}=$R->SETEX('SESSION:'.$Q{DIGEST},300,$Q{REMOTE_ADDR}) if $Q{TOKEN};
@@ -1137,8 +1154,9 @@ return('MO_SMS',1,&response('MO_SMS','OK',$Q{transactionid},0,'RuimTools'));#By 
 # Authenticate inbound SMS request ##############################################
 ###
 sub MT_SMS{
-#logger('LOGDB','MT_SMS',$Q{transactionid},$Q{imsi},'RSP',"1");
-return('MT_SMS',1,&response('MT_SMS','OK',$Q{transactionid},1));# By default we accept inbound SMS MT
+#logger('LOG','MT_SMS',$Q{transactionid},$Q{imsi},'RSP',"1");
+$Q{REQUEST_STATUS}=$CONF{sms_mt_allow};
+return('OK',1,response('MT_SMS_RESPONSE','OK',$Q{REQUEST_STATUS}));# By default we accept inbound SMS MT
 }#end sub MT_SMS
 #
 ### sub MOSMS_CDR ##################################################################
@@ -1189,20 +1207,23 @@ return ('SMS_CDR',$sql_result);
 #
 ### sub DataAUTH ###################################################################
 sub DataAUTH{
-#use vars qw(%Q);
-#my ($status,$code,$balance)=CURL('get_user_info',${SQL(qq[SELECT get_uri2('get_user_info',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
-#my $data_auth=${SQL(qq[SELECT data_auth("$Q{MCC}","$Q{MNC}","$Q{TotalCurrentByteLimit}","$balance")],2)}[0];
-#$data_auth=0 if !$data_auth;
-#logger('LOG','DataAUTH',$data_auth) if $CONF{debug}==4;
+use vars qw(%Q);
+my ($status,$code,$balance)=CURL('get_user_info',template('get_user_info'));
+$Q{DATA_AUTH}=scalar ($Q{DATA_AUTH}=${SQL(qq[SELECT data_auth("$Q{MCC}","$Q{MNC}","$Q{TOTALCURRENTBYTELIMIT}","$balance")],)}[0])>0 ? $Q{DATA_AUTH} :0;
+#$Q{DATA_AUTH}=0 if !$Qdata_auth;
+logger('LOG','DataAUTH',$Q{DATA_AUTH}) if $CONF{debug}==4;
 #$Q{SUB_CREDIT_INET}=sprintf '%.2f',(CURL('get_user_info',template('get_user_info'))*1.25);
-return ('DataAUTH', 1,&response('response','OK',0));
+return ('DataAUTH',$Q{DATA_AUTH},&response('response','OK',0));
 }
 ### END sub DataAUTH ###############################################################
 #
 ### sub DataSession ###################################################################
 sub DataSession{
-#my ($status,$code,$result)=CURL('set_user_balance',${SQL(qq[SELECT get_uri2('set_user_balance',"$Q{imsi}",NULL,NULL,$Q{amount}*-1,NULL)],2)}[0]);
-logger('LOG','DataSession-[legid]',$Q{CALLLEGID}) if $CONF{debug}==4;
+return ('DataSession', $Q{TRANSACTIONID}, response('DataSession','HTML','REJECT - DUPLICATE')) if $R->SISMEMBER('DATASESSION',$Q{CALLLEGID});
+$Q{AMOUNT}=$Q{TOTALCOST}{amount}{value}*-1.25;
+my ($status,$code,$result)=CURL('set_user_balance',template('set_user_balance'));
+logger('LOG','DataSession-[legid:amount]',"$Q{CALLLEGID}:$Q{AMOUNT}") if $CONF{debug}==4;
+$R->SADD('DATASESSION',$Q{CALLLEGID});
 return ('DataSession', $Q{TRANSACTIONID}, response('DataSession','HTML','200'));
 } 
 ### END sub DataSession ##############################################################
@@ -1212,11 +1233,13 @@ return ('DataSession', $Q{TRANSACTIONID}, response('DataSession','HTML','200'));
 ###
 sub msisdn_allocation{
 use vars qw(%Q);
-my $SQL=qq[UPDATE cc_card set phone="+$Q{MSISDN}" where useralias=$Q{IMSI} or firstname=$Q{IMSI}];
-my $sql_result=&SQL($SQL);
-my ($status,$code,$new_user)=CURL('new_user',${SQL(qq[SELECT get_uri2('new_user',"$Q{IMSI}",NULL,NULL,NULL,NULL)],2)}[0]);
-logger('LOG','msisdn_allocation',$sql_result) if $CONF{debug}==4;
-return ('msisdn_allocation',$sql_result,response('CDR_response','OK',$sql_result));
+SQL(qq[UPDATE cc_card set phone="+$Q{MSISDN}" where useralias=$Q{GIMSI} or firstname=$Q{GIMSI}]);
+#my $sql_result=&SQL($SQL);
+$R->HSET('SUB:'.$Q{IMSI},'SUB_DID',$Q{MSISDN});
+my ($status,$code,$new_user)=CURL('new_user',template('new_user'));
+logger('LOG','msisdn_allocation',$Q{STATUS}) if $CONF{debug}==4;
+$Q{CDR_STATUS} = $Q{STATUS} eq 'Failed' ? 0: 1;
+return ('msisdn_allocation',$code,response('CDR_response','OK',$Q{CDR_STATUS}));
 }#end sub msisdn_allocation #######################################################
 #
 ### sub email #########################################################
