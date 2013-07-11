@@ -1199,13 +1199,13 @@ return ('DataAUTH', 1,&response('response','OK',0));
 }
 ### END sub DataAUTH ###############################################################
 #
-### sub POSTDATA ###################################################################
+### sub DataSession ###################################################################
 sub DataSession{
 #my ($status,$code,$result)=CURL('set_user_balance',${SQL(qq[SELECT get_uri2('set_user_balance',"$Q{imsi}",NULL,NULL,$Q{amount}*-1,NULL)],2)}[0]);
 logger('LOG','DataSession-[legid]',$Q{CALLLEGID}) if $CONF{debug}==4;
 return ('DataSession', $Q{TRANSACTIONID}, response('DataSession','HTML','200'));
 } 
-### END sub POSTDATA ##############################################################
+### END sub DataSession ##############################################################
 #
 ### sub msisdn_allocation #########################################################
 # First LU with UK number allocation
