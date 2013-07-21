@@ -11,6 +11,7 @@ no warnings 'once';
 ####### CONF ####################################
 my $R0 = Redis->new;
 my %CONF=$R0->HGETALL('CONF');
+map {$CONF{$_}=pack('H*',$CONF{$_})} keys %CONF;
 #
 ####### FORK ####################################
 our $pid = fork;
