@@ -5,26 +5,20 @@
 ########## VERSION AND REVISION ################################
 ## Copyright (C) 2012, RuimTools denis@ruimtools.com
 ##
-my $rev='MSRN.ME 210713-rev.72.7';
+my $rev='MSRN.ME 310713-rev.74.3';
 ##
 #################################################################
 ## 
 ########## MODULES ##############################################
-#use threads;
-#use threads::shared;
 use FCGI;
 use FCGI::ProcManager qw(pm_manage pm_pre_dispatch pm_post_dispatch);
 use WWW::Curl::Easy;
 use Redis;
-#use Net::Telnet();
 use DBI;
 use Data::Dumper;
 use IO::Socket;
-#use XML::Simple;
-#use XML::Bare::SAX::Parser;
 use XML::Bare;
 use JSON::XS;
-#Business::PayPal;
 use Digest::SHA qw(hmac_sha512_hex);
 use Digest::MD5 qw(md5_hex);
 use URI::Escape;
@@ -42,22 +36,6 @@ use warnings;
 use strict;
 no warnings 'once';
 ########## END OF MODULES #######################################
-# use REDIS CONF (H)
-# use REDIS TEMPLATE (H)
-# use REDIS RESPONSE (S)
-# use REDIS STATUS (H)
-# use REDIS SIG (H)
-# use REDIS AGENT (H)
-# use REDIS IMSI (H)
-# use REDIS DID (L)
-# use REDIS subscriptions (L)
-# use REDIS STAT_SUB (K)
-# use REDIS STAT_AGENT (K)
-# use REDIS PLMN (K)
-# use REDIS VOUCHER (H)
-# use REDIS TID (Z)
-# use REDIS SDR (P)
-# use REDIS TID (P)
 ########## CONFIG STRINGS #######################################
 my $R0 = Redis->new;
 $R0->hset('CONF','rev',unpack('H*',$rev));
@@ -102,6 +80,7 @@ pm_pre_dispatch();
 	$t0=Benchmark->new;
 		$Q{REQUEST}= $env->{REQUEST_METHOD} eq 'POST' ? <STDIN> : $env->{QUERY_STRING};
 			$Q{REMOTE_ADDR}=$env->{REMOTE_ADDR};
+			$Q{HTTP_USER_AGENT}=$env->{HTTP_USER_AGENT};
 			$Q{REQUEST_TYPE}='GUI' if $Q{REQUEST}!~m/request_type|api_cmd|datasession/ig;
 				print main();
 			my $t2=Benchmark->new;
@@ -120,8 +99,8 @@ sub main{
 use vars qw(%Q $dbh $R);
 	if (XML_PARSE($Q{REQUEST},'xml')>0){#if not empty set
 		my $head=$Q{REQUEST_TYPE};
-		uri_unescape($Q{CALLDESTINATION})=~/^\*(\d{3})(\*|\#)(\D{0,}\d{0,}).?(.{0,}).?/ if $Q{CALLDESTINATION};
-		($Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT})=($1,$3,$4);
+		($Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT})=uri_unescape($Q{CALLDESTINATION})=~/^\*(\d{3})[\*|\#](\D{0,}\d{0,}).?(.{0,}).?/ if $Q{CALLDESTINATION};
+#		($Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT})=($1,$3,$4);
 		$Q{IMSI}=$Q{IMSI} ? substr($Q{IMSI},-6,6) :0;
 		$Q{GIMSI}=$CONF{imsi_prefix}.$Q{IMSI};
 		$Q{TIMESTAMP}=strftime("%Y-%m-%d %H:%M:%S", localtime);
@@ -162,7 +141,7 @@ our ($ACTION_STATUS,$ACTION_CODE,$ACTION_RESULT,%LOG);
 eval {	($ACTION_STATUS,$ACTION_CODE,$ACTION_RESULT)=&$subref();
 			};warn $@ if $@;  logger('LOG',"MAIN-ACTION-SUBREF","ERROR $ACTION_TYPE $@") if $@;
 			return &response('ERROR','ERROR','GENERAL ERROR #'.__LINE__) if $@;
-		logger('LOG',"MAIN-ACTION-RESULT-$ACTION_TYPE","$ACTION_STATUS $ACTION_CODE". substr($ACTION_RESULT,0,100)) if $CONF{debug}>3;
+		logger('LOG',"MAIN-ACTION-RESULT-$ACTION_TYPE","$ACTION_STATUS $ACTION_CODE". substr($ACTION_RESULT,0,10)) if $CONF{debug}>3;
 		logger('LOG',"MAIN-ACTION-RESULT-$ACTION_TYPE","$ACTION_STATUS $ACTION_CODE") if $CONF{debug}<=3;
 		logger('LOGDB',"$ACTION_TYPE",0,"$ACTION_STATUS","$ACTION_CODE");
 		BILL($Q{BILL_TYPE}) if $ACTION_CODE>0;
@@ -188,7 +167,7 @@ $Q{REQUEST_LINE}=~s/\r|\n|\t|\+//g;
 #
 logger('LOG',"PARSE-REQUEST-LINE",$Q{REQUEST_LINE}) if $CONF{debug}>2;
 
-if ($Q{REQUEST_LINE}=~m/xml version/){
+if ($Q{REQUEST_LINE}=~m/xml version/){#XML REQUEST
 eval {
 	my $xml=new XML::Bare(text=>$Q{REQUEST_LINE});
 	$Q{REQUEST}=$xml->parse();
@@ -201,7 +180,9 @@ else{#CGI REQUEST
 	logger('LOG',"CGI-PARSE-REQUEST",$Q{REQUEST_LINE}) if $CONF{debug}>1;
 		return 0 if $Q{REQUEST_LINE} eq '';
 		$Q{REQUEST_LINE}=~tr/\&/\;/;
-		my %Q_tmp=split /[;=]/,$Q{REQUEST_LINE}; map {$Q{uc $_}=uri_unescape($Q_tmp{$_})} keys %Q_tmp;
+		my %Q_tmp=split /[;=]/,$Q{REQUEST_LINE}; 
+		map {$Q{uc $_}=uri_unescape($Q_tmp{$_})} keys %Q_tmp;
+		if ($Q{MCC}){eval {$Q{MTC}=${SQL(qq[CALL get_mtc("$Q{TADIG}",$Q{MCC},$Q{MNC})],'array')}[0]}; warn $@ if $@;  logger('LOG',"CGI-PARSE-REQUEST","ERROR $@") if $@}
 		return scalar keys %Q;
 }#else cgi
 #
@@ -247,7 +228,8 @@ switch ($Q{REQUEST_OPTION}){
 	case /get_msrn/ {
 		map {$Q{uc $_}=$Q{REQUEST}->{MSRN_Response}{$_}{value} if $_!~/^_?(i|z|pos|imsi|value)$/i} keys $Q{REQUEST}->{MSRN_Response};
 		$Q{ERROR}=$Q{REQUEST}->{Error_Message} ? $Q{REQUEST}->{Error_Message}{value} : 0;
-$Q{MTC}= scalar @{$R->KEYS('PLMN:'.$Q{TADIG}.':*')} ? $R->GET($R->KEYS('PLMN:'.$Q{TADIG}.':*') ) : scalar @{$R->KEYS('PLMN:*:'.$Q{MCC}.':'.int $Q{MNC})} ? $R->GET($R->KEYS('PLMN:*:'.$Q{MCC}.':'.int $Q{MNC}) ) : 0;
+		if ($Q{MCC}){eval {$Q{MTC}=${SQL(qq[CALL get_mtc("$Q{TADIG}",$Q{MCC},$Q{MNC})],'array')}[0]};warn $@ if $@;  logger('LOG',"CGI-PARSE-REQUEST","ERROR $@") if $@;}
+#$Q{MTC}= scalar @{$R->KEYS('PLMN:'.$Q{TADIG}.':*')} ? $R->GET($R->KEYS('PLMN:'.$Q{TADIG}.':*') ) : scalar @{$R->KEYS('PLMN:*:'.$Q{MCC}.':'.int $Q{MNC})} ? $R->GET($R->KEYS('PLMN:*:'.$Q{MCC}.':'.int $Q{MNC}) ) : 0;
 		$Q{MSRN}=~/\d{7,15}/ ? $R->SETEX('MSRN_CACHE:'.$Q{IMSI},60,$Q{MSRN}) : $R->SETEX('MSRN_CACHE:'.$Q{IMSI},300,'OFFLINE');
 		logger('LOG',"XML-PARSED-$Q{REQUEST_OPTION}","$Q{MSRN} $Q{MCC} $Q{MNC} $Q{TADIG} $Q{MTC} $Q{ERROR}") if $CONF{debug}>3;
 		return $Q{MSRN};
@@ -264,7 +246,7 @@ $Q{MTC}= scalar @{$R->KEYS('PLMN:'.$Q{TADIG}.':*')} ? $R->GET($R->KEYS('PLMN:'.$
 #		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}","$SMS $ERROR") if $CONF{debug}==4;
 #		return "$ERROR$SMS";
 #	}#sms
-	case 'send_sms_mt' {
+	case /send_sms_m/ {
 		$Q{STATUS}=$Q{REQUEST}->{SMS_Response}{REQUEST_STATUS}{value};
 		$Q{ERROR}=$Q{REQUEST}->{Error_Message}{value};
 		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}","$Q{STATUS} $Q{ERROR}") if $CONF{debug}>2;
@@ -282,7 +264,7 @@ $Q{MTC}= scalar @{$R->KEYS('PLMN:'.$Q{TADIG}.':*')} ? $R->GET($R->KEYS('PLMN:'.$
 		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}","$TIME $ERROR") if $CONF{debug}>2;
 		return "$ERROR$TIME";
 	}#get time
-	case 'get_user_info' {
+	case 'voip_user_info' {
 		my $BALANCE=$Q{REQUEST}{GetUserInfo}->{Balance}{value};
 		our $ERROR=$Q{REQUEST}{GetUserInfo}->{Reason}{value};
 		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}","$BALANCE $ERROR") if $CONF{debug}>2;
@@ -294,7 +276,7 @@ $Q{MTC}= scalar @{$R->KEYS('PLMN:'.$Q{TADIG}.':*')} ? $R->GET($R->KEYS('PLMN:'.$
 		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}","$BALANCE $ERROR") if $CONF{debug}>2;
 		return "$ERROR$BALANCE";
 	}#set user balance
-	case 'new_user' {
+	case 'voip_user_new' {
 		$Q{STATUS}= ref $Q{REQUEST}->{CreateAccount}{Result} eq 'ARRAY' ? $Q{REQUEST}->{CreateAccount}{Result}[0]{value} : $Q{REQUEST}->{CreateAccount}{Result}{value};
 		my $ERROR= ref $Q{REQUEST}->{CreateAccount}{Reason} eq 'ARRAY' ? $Q{REQUEST}->{CreateAccount}{Reason}[1]{value} : $Q{REQUEST}->{CreateAccount}{Reason}{value};
 		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}","$Q{STATUS} $ERROR") if $CONF{debug}>2;
@@ -303,8 +285,8 @@ $Q{MTC}= scalar @{$R->KEYS('PLMN:'.$Q{TADIG}.':*')} ? $R->GET($R->KEYS('PLMN:'.$
 	case /siminfo/i {
 		$Q{PIN}=$Q{REQUEST}->{Sim}{Password}{value};
 		our $ERROR=$Q{REQUEST}->{Error}{value};
-		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}","xxxx $ERROR") if $CONF{debug}>2;
-		return "xxxx$ERROR";
+		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}","$Q{PIN} $ERROR") if $CONF{debug}>2;
+		return "$Q{PIN}$ERROR";
 	}#sim info	
 	case 'set_user' {
 		 $Q{STATUS}=$Q{REQUEST}->{status}{value};
@@ -374,25 +356,24 @@ my ($rc, $sth, @result, $result, $new_id);
 $dbh=DBI->connect('DBI:mysql:msrn',$CONF{db_user},$CONF{db_pass}) if $dbh->ping==0;
 #
 if($SQL!~m/^[SELECT|CALL]/i){#INSERT/UPDATE request
-logger('LOG','SQL-MYSQL-GET',"DO $SQL") if $CONF{debug}>2;
+logger('LOG','SQL-MYSQL-GET',"DO $SQL") if $CONF{debug}==5;
 	$rc=$dbh->do($SQL);#result code
 	push @result,$rc;#result array
 	$new_id = $dbh -> {'mysql_insertid'};#autoincrement id
 }#if SQL INSERT UPDATE
 else{#SELECT request
-logger('LOG','SQL-MYSQL-GET',"EXEC $SQL") if $CONF{debug}>2;
+logger('LOG','SQL-MYSQL-GET',"EXEC $SQL") if $CONF{debug}==5;
 	$sth=$dbh->prepare($SQL);
 	$rc=$sth->execute;#result code
-	@result=$sth->fetchrow_array if $flag eq '2';
+	@result=$sth->fetchrow_array if $flag eq 'array';
 	$result=$sth->fetchrow_hashref if $flag eq 'hash';
 	$result=$sth->fetchall_arrayref if $flag eq 'ajax';
 }#else SELECT
 #
 if($rc){#if result code
-	logger('LOG','SQL-MYSQL-RETURNED-[code/array/hash/id]',"$rc/@result/$result/$new_id") if $CONF{debug}>3;
-	return \@result if $flag eq '2';
+	logger('LOG','SQL-MYSQL-RETURNED-[code/array/hash/id]',"$rc/@result/$result/$new_id") if $CONF{debug}==5;
+	return \@result if $flag eq 'array';
 	return  $result if $flag =~/hash|ajax/;
-#	return  $result if $flag eq 'ajax';
 	return @result; 
 }#if result code
 else{#if no result code
@@ -478,11 +459,11 @@ case 'LOGDB'{
 sub LU_CDR{ 
 #use vars qw($new_sock %Q);
 #if ($Q{SUB_ID}>0){#if found subscriber
-#			my $UPDATE_result=${SQL(qq[SELECT set_country($Q{imsi},$Q{mcc},$Q{mnc},"$Q{msisdn}")],2)}[0];
+			SQL(qq[UPDATE cc_card SET country=CONCAT_WS(' ',(SELECT country from cc_mnc WHERE mcc=$Q{MCC} limit 1),"$Q{TADIG}") WHERE username=$Q{SUB_CN} limit 1]);
 			$R->EXPIRE('OFFLINE:'.$Q{IMSI},0);
-			$R->HMSET("SUB:$Q{IMSI}",'SUB_MCC',$Q{MCC},'SUB_MNC',$Q{MNC},'SUB_TADIG',$Q{TADIG});
+#			$R->HMSET("SUB:$Q{IMSI}",'SUB_MCC',$Q{MCC},'SUB_MNC',$Q{MNC},'SUB_TADIG',$Q{TADIG});
 			$Q{CDR_STATUS}=1;
-			$Q{MTC}= scalar @{$R->KEYS("PLMN:$Q{TADIG}:*")} ? $R->GET($R->keys("PLMN:$Q{TADIG}:*")) : 0;
+#			$Q{MTC}= scalar @{$R->KEYS("PLMN:$Q{TADIG}:*")} ? $R->GET($R->keys("PLMN:$Q{TADIG}:*")) : 0;
 # Comment due activation proccess
 #			if ($UPDATE_result){#if contry change
 #			my $msrn=CURL('get_msrn_free',${SQL(qq[SELECT get_uri2('get_msrn',"$Q{imsi}",NULL,NULL,NULL,NULL)],2)}[0]);
@@ -567,7 +548,7 @@ my (%RATE,%cache,$type);
 if ($Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{7,15})$/){#if correct destination number - process imsi msrn
 #	my	$msrn=$2 if (($Q{USSD_CODE}==128)&&($Q{USSD_EXT}=~/^(\+|00)?([1-9]\d{7,15})#?$/));#local number call
 #logger('LOG','SPOOL-LOCAL-NUMBER-CALL',"$msrn $Q{USSD_EXT}") if $msrn and $CONF{debug}==4;
-	(my $status,my $code,$Q{MSRN})=CURL('get_msrn',TEMPLATE('get_msrn'),$CONF{api_uri});
+	(my $status,my $code,$Q{MSRN})=CURL('get_msrn',TEMPLATE('get_msrn'),$CONF{api2});
 #	my $offline=1 if $msrn} eq 'OFFLINE';
 #logger('LOG','SPOOL-GET-MSRN-RESULT',$msrn) if $CONF{debug}==4;
 #
@@ -577,9 +558,9 @@ foreach my $type ('USSD_DEST','MSRN'){
 my %HASH=%{CALL_RATE($Q{$type})};
 map {$Q{$type.'_'.uc($_)}=$HASH{$_}} keys %HASH;
 }#foreach number
-	$Q{'MTC'}=$Q{MTC}*100;#from $ to c
+#	$Q{'MTC'}=$Q{MTC}*100;#from $ to c
 	$Q{'MSRN_RATE'}=$Q{'MSRN_RATE'}+$Q{'MTC'};#msrn in c + mtc in c= c RATEA
-	$Q{'USSD_DEST_RATE'}=ceil($Q{'USSD_DEST_RATE'}+$Q{'USSD_DEST_RATE'}/$CONF{'markup'});#rate+markup% RATEB
+	$Q{'USSD_DEST_RATE'}=ceil($Q{'USSD_DEST_RATE'}*$CONF{'markup_rate'});#rate+markup% RATEB
 	$Q{'CALL_RATE'}=($Q{'USSD_DEST_RATE'}+$Q{'MSRN_RATE'})/100;#show user in $
 	$Q{'CALL_LIMIT'}=($Q{'CALL_LIMIT'}=floor(($Q{'SUB_CREDIT'}/$Q{'CALL_RATE'})*60))>$CONF{'max-call-time'} ? $CONF{'max-call-time'} : $Q{'CALL_LIMIT'};
 ##(sub_credit in $ / call_rate in $) * 60 = seconds to call
@@ -618,80 +599,65 @@ use vars qw(%Q $R);
 switch ($Q{USSD_CODE}){
 ###
 	case "000"{#SUPPORT request
-		logger('LOG','SIG-USSD-SUPPORT-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
+		logger('LOG','USSD-SUPPORT-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
 		$Q{EMAIL}="denis\@ruimtools.com";
-		$Q{EMAIL_SUB}="NEW TT: [$Q{IMSI}]";
-		$Q{EMAIL_TEXT}=${SQL(qq[NULL,'ussd',$Q{USSD_CODE},NULL],1)}[0];
+		$Q{EMAIL_SUB}="NEW TT: [$Q{IMSI}:$Q{TID}]";
+		$Q{EMAIL_TEXT}='USSD-SUPPORT-REQUEST: '.$Q{USSD_DEST};
 		$Q{EMAIL_FROM}="SUPPORT";
 		$Q{EMAIL_FROM_ADDRESS}="denis\@ruimtools.com";
 		email();
-		return ('OK',1,response('MOC_RESPONSE','XML',${SQL(qq[NULL,'ussd',$Q{USSD_CODE},NULL],1)}[0]));		
+		return ('OK',1,response('MOC_RESPONSE','DEFAULT',"SUPPORT TICKET #$Q{TID} REGISTERED"));		
 			}#case 000
 ###
 	case "100"{#MYNUMBER request
-		logger('LOG','SIG-USSD-MYNUMBER-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
-		$Q{SUB_DID}= scalar ($Q{SUB_DID}=$R->HGET('SUB:'.$Q{IMSI},'SUB_DID')) ? $Q{SUB_DID} : $Q{GLOBALMSISDN};
+		logger('LOG','USSD-MYNUMBER-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
+#		$Q{SUB_DID}= scalar ($Q{SUB_DID}=$R->HGET('DID',$Q{GIMSI})) ? $Q{SUB_DID} : $Q{GLOBALMSISDN};
 #		$Q{SUB_CREDIT}=sprintf '%.2f',$Q{SUB_CREDIT};
 		return ('OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:$Q{USSD_CODE}")));		
 	}#case 100
 ###
 	case "110"{#IMEI request
-		logger('LOG','SIG-USSD-IMEI-REQUEST',"$Q{USSD_DEST}") if $CONF{debug}==4;
-		redis('hset',"SUB:$Q{IMSI}",'SUB_HANDSET',"$Q{USSD_DEST} $Q{USSD_EXT}");
+		logger('LOG','USSD-IMEI-REQUEST',"$Q{USSD_DEST}") if $CONF{debug}==4;
+		$R->HSET("SUB:$Q{IMSI}",'SUB_HANDSET',"$Q{USSD_DEST} $Q{USSD_EXT}");
 		return ('OK',$Q{USSD_DEST},response('MOC_RESPONSE','XML',TEMPLATE("ussd:$Q{USSD_CODE}")));
 	}#case 110
 ###
 	case "122"{#SMS request
-		logger('LOG','SIG-USSD-SMS-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST} $Q{USSD_EXT}") if $CONF{debug}==4;
-		#logger('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST} $Q{USSD_EXT}");
+		logger('LOG','USSD-SMS-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST}") if $CONF{debug}==4;
 		my $SMS_result=SMS();#process sms
-#		my $SMS_response=${SQL(qq[NULL,'ussd',$Q{USSD_CODE}$SMS_result,NULL],1)}[0];#get response text by sms result
-#		$SMS_result="Sorry, unknown result. Please call *000#" if $SMS_response eq '';#something wrong - need support
-		logger('LOG','SIG-USSD-SMS-RESULT',"$SMS_result") if $CONF{debug}==4;
-		#logger('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'RSP',"$SMS_result");
+		logger('LOG','USSD-SMS-RESULT',"$SMS_result") if $CONF{debug}==4;
 		return ('OK',$SMS_result, response('MOC_RESPONSE','XML',TEMPLATE('ussd:'.$Q{USSD_CODE}.$SMS_result)));
-		
 	}#case 122
 ###
-	case [111,123]{#voucher refill request
-		logger('LOG','SIG-USSD-BALANCE-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
-		$Q{SUB_CREDIT_INET}=sprintf '%.2f',(CURL('get_user_info',TEMPLATE('get_user_info'),$CONF{api3})*1.25);
+	case [111,123,124]{#voucher refill request
+		logger('LOG','USSD-BALANCE-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
+		$Q{SUB_CREDIT_INET}=sprintf '%.2f',(CURL('get_user_info',TEMPLATE('voip_user_info'),$CONF{api3})*$CONF{euro_currency});
 		$Q{TOPUP}=$R->SREM('VOUCHER',$Q{USSD_DEST}) ? $CONF{voucher_amount} :0;
 		$Q{SUB_CREDIT}=$Q{SUB_CREDIT}+$Q{TOPUP};
 		return ('OK',$Q{SUB_CREDIT},response('MOC_RESPONSE','XML',TEMPLATE("ussd:111")));
 	}#case 111
-#
+###
 	case "125"{#voip account
-	logger('LOG','SIG-USSD-VOIP-ACCOUNT-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
-	my ($status,$code,$new_user)=CURL('new_user',${SQL(qq[SELECT get_uri2('new_user',"$Q{IMSI}",NULL,NULL,NULL,NULL)],2)}[0]) if !$Q{SUB_VOIP};
-	#logger('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'RSP',"$Q{USSD_CODE} $new_user") if !$Q{SUB_VOIP};
-	return ('OK',1, &response('auth_callback_sig','XML',$Q{TRANSACTIONID},${SQL(qq[$Q{IMSI},'ussd',$Q{USSD_CODE},NULL],1)}[0]));
-	}#case 124
+	$Q{SUB_PIN} ? return ('OK',1,response('MOC_RESPONSE','DEFAULT','LOGIN:sim'.$Q{SUB_CN}.'*'.$CONF{voip_domain}.' PIN:'.$Q{SUB_PIN}.TEMPLATE('voip_user_help'))) : return ('WARNING',0,response('MOC_RESPONSE','DEFAULT','NEED TO SET NEW PIN. CALL *000*5#'));
+#	my ($status,$code,$new_user)=CURL('voip_user_new',TEMPLATE('voip_user_pin'),$CONF{api3});
+#	my ($status,$code,$new_user)=CURL('voip_user_new',TEMPLATE('voip_user_status'),$CONF{api3});
+	}#case 125
 ###
 	case "126"{#RATES request
-		logger('LOG','SIG-USSD-RATES',"$Q{USSD_CODE} $Q{USSD_DEST}") if $CONF{debug}==4;
-		#logger('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE} $Q{USSD_DEST}");
-		return ('NO DEST',-1,&response('auth_callback_sig','XML',$Q{TRANSACTIONID},"Please check destination number!")) if $Q{USSD_DEST} eq '';
-		$Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{1,15})$/;
-		my $dest=$2;
-		my ($status, $code, $msrn)=CURL('get_msrn',${SQL(qq[SELECT get_uri2('get_msrn',"$Q{IMSI}",NULL,NULL,NULL,NULL)],2)}[0]);
-		my $rate=${SQL(qq[SELECT round(get_rate($msrn,$dest),2)],2)}[0] if $msrn=~/^(\+)?([1-9]\d{7,15})$/;
-		logger('LOG','SIG-USSD-RATES-RETURN',"$rate") if $CONF{debug}==4;
-	return ('OK',1,&response('auth_callback_sig','XML',$Q{TRANSACTIONID},"Callback rate to $Q{USSD_DEST}: \$ $rate. Extra: ".substr($Q{IOT_CHARGE}/0.63,0,4))) if $rate=~/\d/;
-		return ('OFFLINE',0,&response('auth_callback_sig','XML',$Q{TRANSACTIONID},"Sorry, number offline")) if $msrn=~/OFFLINE/;
+	$Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{1,15})$/ ? return ('OK',1,response('MOC_RESPONSE','DEFAULT',TEMPLATE('ussd:126:rate').sprintf '%.2f',${CALL_RATE($2)}{RATE}/100*$CONF{'markup_rate'})) : return ('NO DEST',-1,response('MOC_RESPONSE','DEFAULT',TEMPLATE('ussd:126:nodest')));
 	}#case 126
 ###
 	case "127"{#CFU request
-		logger('LOG','SIG-USSD-CFU-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST}") if $CONF{debug}==4;
+		logger('LOG','USSD-CFU-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST}") if $CONF{debug}==4;
 		if ($Q{USSD_DEST}=~/^(\+|00)?(\d{5,15})$/){#if prefix +|00 and number length 5-15 digits
 			logger('LOG','SIG-USSD-CFU-REQUEST',"Subcode processing $Q{USSD_DEST}") if $CONF{debug}==4;
 				 my $CFU_number=$2;
 				 my $SQL=qq[SELECT get_cfu_code($Q{IMSI},"$CFU_number")];
-					my $CODE=${SQL("$SQL",2)}[0];
-(my $status,my $code,$CODE)=CURL('sms_mo',${SQL(qq[SELECT get_uri2('sms_mo',NULL,"+$CFU_number","$Q{MSISDN}",'ruimtools',"$CODE")],2)}[0]) if $CODE=~/\d{5}/;
+					my $CODE=${SQL("$SQL",'array')}[0];
+(my $status,my $code,$CODE)=CURL('sms_mo',${SQL(qq[SELECT get_uri2('sms_mo',NULL,"+$CFU_number","$Q{MSISDN}",'ruimtools',"$CODE")],'array')}[0]) if $CODE=~/\d{5}/;
 					$CFU_number='NULL' if $CODE!~/0|1|INUSE/;
 					$SQL=qq[SELECT get_cfu_text("$Q{IMSI}","$CODE",$CFU_number)];
-					my $TEXT_result=${SQL("$SQL",2)}[0];
+					my $TEXT_result=${SQL("$SQL",'array')}[0];
 					return ('OK',$CODE,&response('auth_callback_sig','XML',$Q{TRANSACTIONID},$TEXT_result));
 					#logger('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'RSP',"$CODE $Q{USSD_CODE} $Q{USSD_DEST}");
 			}#if number length
@@ -699,14 +665,14 @@ switch ($Q{USSD_CODE}){
 			logger('LOG','SIG-USSD-CFU-REQUEST',"Code processing $Q{USSD_CODE} $Q{USSD_DEST}") if $CONF{debug}==4;
 				my $SQL=qq[SELECT get_cfu_text("$Q{IMSI}",'active',NULL)];
 				#my @SQL_result=&SQL($SQL);
-				my $TEXT_result=${SQL("$SQL",2)}[0]; 
+				my $TEXT_result=${SQL("$SQL",'array')}[0]; 
 				return ('OK', $Q{USSD_CODE},&response('auth_callback_sig','XML',$Q{TRANSACTIONID},"$TEXT_result"));
 				#logger('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'RSP',"$Q{USSD_CODE} $Q{USSD_DEST}");
 				}
 	}#case 127
 ###
 	case "128"{#local call request
-		logger('LOG','SIG-LOCAL-CALL-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
+		logger('LOG','LOCAL-CALL-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
 		#logger('LOGDB','auth_callback_sig',"$Q{transactionid}","$Q{imsi}",'OK',"$Q{USSD_CODE}");
 		my $SPOOL_result=SPOOL() if $Q{USSD_EXT};
 		return ('OK',1, $SPOOL_result) if $Q{USSD_EXT};
@@ -714,23 +680,23 @@ switch ($Q{USSD_CODE}){
 	}#case 128
 ###
 	case "129"{#my did request
-		logger('LOG','SIG-DID-NUMBERS-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST} $Q{USSD_EXT}") if $CONF{debug}==4;#(!) hide pin
+		logger('LOG','DID-NUMBERS-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST} $Q{USSD_EXT}") if $CONF{debug}==4;#(!) hide pin
 		$Q{USSD_DEST}=$Q{IMSI} if ($Q{USSD_DEST}!~/^(\+|00)?([1-9]\d{7,15})$/);
 		if ($Q{USSD_EXT}=~/^([0-9]\d{3})#?$/){# check pin
 		$Q{-O}='-d';
-		($Q{-H},$Q{USER},$Q{PASS})=@{SQL(qq[SELECT description,auth_login,auth_pass from cc_provider WHERE provider_name='C94'],2)};
+		($Q{-H},$Q{USER},$Q{PASS})=@{SQL(qq[SELECT description,auth_login,auth_pass from cc_provider WHERE provider_name='C94'],'array')};
 		$Q{ACTIONS}='SimInformationByMSISDN'; $Q{REQUEST}='IMSI';
 #		CURL($Q{ACTIONS},XML());
-		logger('LOG','SIG-DID-NUMBERS-PIN-CHECK',"SUCCESS") if $1==$Q{PIN} and $CONF{debug}==4;;
-		logger('LOG','SIG-DID-NUMBERS-PIN-CHECK',"ERROR") if $1!=$Q{PIN} and $CONF{debug}==4;
+		logger('LOG','DID-NUMBERS-PIN-CHECK',"SUCCESS") if $1==$Q{PIN} and $CONF{debug}==4;;
+		logger('LOG','DID-NUMBERS-PIN-CHECK',"ERROR") if $1!=$Q{PIN} and $CONF{debug}==4;
 		return ('PIN INCORRECT',-1,&response('auth_callback_sig','XML',$Q{transactionid},"Please enter correct PIN")) if $1!=$Q{PIN};
 		$Q{USSD_DEST}=$Q{SUB_ID};
 		}#if pin
-		my $did=${SQL(qq[SELECT set_did("$Q{USSD_DEST}")],2)}[0];
+		my $did=${SQL(qq[SELECT set_did("$Q{USSD_DEST}")],'array')}[0];
 		return ('OK',1, &response('auth_callback_sig','XML',$Q{TRANSACTIONID},"$did"));
-	}#case 128
+	}#case 129
 ###
-
+#
 	else{#switch ussd code
 	return ('CODE NOT DEFINED',-3,&response('MOC_RESPONSE','XML','UNKNOWN CODE '.$Q{USSD_CODE}));
 	}#end else switch ussd code (no code defined)
@@ -797,16 +763,19 @@ else{# timeout
 #################################################################
 sub API_CMD{
 if ($R->SISMEMBER('AGENT_SESSION',AUTH())){logger('LOG','API-CMD',"AUTH OK") if $CONF{debug}>1;}#if auth
-elsif($R->EXISTS('SESSION:'.$Q{SESSION})&&$Q{CODE} eq 'ajax'){logger('LOG','API-CMD-AJAX',"AUTH OK") if $CONF{debug}>1;}
+elsif($R->EXISTS('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR}.$Q{HTTP_USER_AGENT})&&$Q{CODE}=~/ajax|js/){logger('LOG','API-CMD-AJAX',"AUTH OK") if $CONF{debug}>1;}
 else{
 	logger('LOG','API-CMD',"AUTH ERROR") if $CONF{debug}>1;
+	my %HASH=(aaData=>'');
+	return GUI() if $Q{CODE}=~/ajax/;
+	return ('NO AUTH',-1,response('api_response','JSON',\%HASH)) if $Q{CODE}=~/ajax/;
 	return ('NO AUTH',-1,response('api_response','ERROR',"NO AUTH"));
 }#else no auth				
 my $result;
 logger('LOG','API-CMD',"$Q{CODE}") if $CONF{debug}>2;
 switch ($Q{CODE}){
 	case 'ping' {#PING
-		sleep 5 if defined $Q{SUB_CODE};
+		sleep 2 if defined $Q{SUB_CODE};
 		return ('OK', 1, response('ping','HTML',"PONG")) if defined $Q{SUB_CODE};
 		return ('OK', 1, response('api_response','XML',"PONG"));
 	}#case ping
@@ -823,25 +792,28 @@ switch ($Q{CODE}){
 	case 'get_did' {#PROCESS DID number
 		logger('LOG','API-CMD-DID-[did/src]',"$Q{RDNIS}/$Q{SRC}") if $CONF{debug}>2;
 				$Q{IMSI} = length($Q{RDNIS})==6 ? $Q{RDNIS} : $R->HGET('DID',$Q{RDNIS});
+				($Q{IMSI},$Q{MSRN},$Q{RDNIS_ALLOW})=$Q{IMSI}=~/(\d+)\:?(\d+)?\:?(.*)?/;
 				$Q{GIMSI}= $CONF{'imsi_prefix'}.$Q{IMSI};
 				GET_SUB();#if no DID no SUB_STATUS
-		(my $status, my $code,$Q{MSRN})=CURL('get_msrn_did',TEMPLATE('get_msrn'),$CONF{api2}) if $Q{SUB_STATUS}==1;
+#		(my $status, my $code,$Q{MSRN})=CURL('get_msrn_did',TEMPLATE('get_msrn'),$CONF{api2}) if $Q{SUB_STATUS}==1 and (not defined $Q{MSRN}||$Q{RDNIS_ALLOW}=~/$Q{SRC}/);
+				(my $status, my $code,$Q{MSRN})=CURL('get_msrn_did',TEMPLATE('get_msrn'),$CONF{api2}) if $Q{SUB_STATUS}==1 and not defined $Q{MSRN};#	||$Q{RDNIS_ALLOW}=~/$Q{SRC}/);
 				$Q{DID_RESULT}=$Q{MSRN}=~/\d{7,15}/;
 				CALL_RATE($Q{MSRN}) if $Q{DID_RESULT};
+				$Q{RATE}=$Q{RATE}+$Q{MTC};
 				BILL('get_msrn_did') if $Q{DID_RESULT};
-				logger('LOG','API-CMD-DID-[status/code/msrn]',"$status $code $Q{MSRN}") if $CONF{debug}>2;
+				logger('LOG','API-CMD-DID-[status/code/msrn/rate]',"$status $code $Q{MSRN} $Q{RATE}") if $CONF{debug}>2;
 				return ('OK',$Q{DID_RESULT},response('get_did','HTML',TEMPLATE('did:'.$Q{DID_RESULT})));
 	}#case get_did
 	case 'send_ussd' {#SEND_USSD
-		if ($Q{SUB_GRP_ID}==$Q{AGENT_AUTH_GRP}&&$Q{USSD_TO} eq $Q{SUB_PHONE}){
-		return ('OK',1,response('api_response','XML',CURL('send_ussd',TEMPLATE('send_ussd'),$CONF{api_uri})));
+		if ($Q{SUB_HASH}=~/$Q{TOKEN}/&&$Q{SMS_TO}=~/$Q{SUB_PHONE}/){
+		return ('OK',1,response('api_response','XML',CURL('send_ussd',TEMPLATE('send_ussd'),$CONF{api2})));
 	}else{
 		return ('ERROR',1,response('api_response','ERROR','NOT YOUR SIM'));
 	}#else AUTH
 		}#case send_ussd		
 	case /send_sms/i {#SEND SMS MT	
-	if ($Q{SUB_GRP_ID}==$Q{AGENT_AUTH_GRP}&&$Q{SMS_TO} eq $Q{SUB_PHONE}){
-		return ('OK',1,response('api_response','XML',undef,CURL('send_sms_mt',TEMPLATE('send_sms_mt'),$CONF{api_uri})));
+	if ($Q{SUB_HASH}=~/$Q{TOKEN}/&&$Q{SMS_TO}=~/$Q{SUB_PHONE}/){
+		return ('OK',1,response('api_response','XML',undef,CURL('send_sms_mt',TEMPLATE('send_sms_mt'),$CONF{api2})));
 	}else{
 		return ('ERROR',1,response('api_response','ERROR','NOT YOUR SIM'));
 	}#else AUTH
@@ -857,12 +829,17 @@ switch ($Q{CODE}){
 		return ('OK',1,response('API_RESPONSE','XML',$Q{STAT}));
 		}#case stat
 	case 'ajax' {#AJAX
-		my %HASH=(aaData=>SQL(TEMPLATE('ajax:'.$Q{SUB_CODE}),'ajax')) if $R->HEXISTS('TEMPLATE','ajax:'.$Q{SUB_CODE});
+		$Q{TOKEN}=$R->GET('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR}.$Q{HTTP_USER_AGENT});
+		$R->HEXISTS('TEMPLATE','ajax:'.$Q{SUB_CODE}) ? my %HASH=(aaData=>SQL(TEMPLATE('ajax:'.$Q{SUB_CODE}),'ajax')) : return GUI($R->EXPIRE('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR}.$Q{HTTP_USER_AGENT},1),$Q{SESSION}=0);
 		logger('LOG','API-CMD-AJAX',$Q{SUB_CODE}) if $CONF{debug}>2;
 		return ('OK',1,response('api_response','JSON',\%HASH));
 		}#case ajax
+	case 'js' {#JS
+		logger('LOG','API-CMD-JS',$Q{SUB_CODE}) if $CONF{debug}>2;
+		return ('OK',1,response('api_response','HTML',TEMPLATE('js:'.$Q{SUB_CODE})));
+		}#case js
 	case /set_user/i {#API C9
-	if ($Q{SUB_GRP_ID}==$Q{AGENT_AUTH_GRP}){		
+	if ($Q{SUB_HASH}=~/$Q{TOKEN}/){		
 	$Q{SUB_CODE} = $Q{SUB_CODE}=~/^enable$/i ? 1 : $Q{SUB_CODE}=~/^disable$/i ? 0 : $Q{SUB_CODE};
 	return ('OK',1, response('api_response','XML',undef,CURL('set_user_status',TEMPLATE('set_user_status'),$R->HGET('AGENT:'.$CONF{api1},'host')))) if $Q{SUB_CODE}!~/^Data/i;
 	return ('OK',1, response('api_response','XML',undef,CURL('set_user',XML($Q{SUB_CODE}),TEMPLATE('set_user'),$R->HGET('AGENT:'.$CONF{api1},'host'))));
@@ -894,7 +871,7 @@ $Q{IMEI}=$Q{DESTINATION}=uri_escape($Q{USSD_DEST}) if $Q{REQUEST_TYPE}=~/(CB|IME
 ($Q{PAGE},$Q{PAGES},$Q{SEQ})=split(undef,$Q{USSD_DEST}) if $Q{REQUEST_TYPE} eq 'SMS'; 
 ($Q{DESTINATION},$Q{MESSAGE})=split('\*',uri_unescape($Q{USSD_EXT})) if $Q{REQUEST_TYPE} eq 'SMS';
 $Q{MESSAGE}=~s/\#// if $Q{REQUEST_TYPE} eq 'SMS';
-$Q{MTC}= scalar @{$R->KEYS("PLMN:*:$Q{MCC}:".int $Q{MNC})} ? $R->GET($R->KEYS("PLMN:*:$Q{MCC}:".int $Q{MNC})) : 0;
+#$Q{MTC}= scalar @{$R->KEYS("PLMN:*:$Q{MCC}:".int $Q{MNC})} ? $R->GET($R->KEYS("PLMN:*:$Q{MCC}:".int $Q{MNC})) : 0;
 $Q{AGENT_URI}= $Q{CALLLEGID} ? TEMPLATE('agent').TEMPLATE('datasession') : $Q{TOTALCURRENTBYTELIMIT} ? TEMPLATE('agent').TEMPLATE('dataauth') : $Q{MESSAGE} ? TEMPLATE('agent').TEMPLATE('smslite') : TEMPLATE('agent') ;
 $Q{AGENT_URI}=XML() if $Q{SUB_AGENT_FORMAT} eq 'xml';
 my ($status, $code,$result)=CURL('AGENT',$Q{AGENT_URI},$Q{SUB_HASH});
@@ -907,20 +884,22 @@ return ($status,$code,response($response_type,$response_options,$result));
 sub AUTH{
 logger('LOG',"API-AUTH-[addr/token/session]","$Q{REMOTE_ADDR} $Q{TOKEN} $Q{SESSION}") if $CONF{debug}>2;
 	$Q{DIGEST}=$Q{SESSION}=$Q{SESSION} ? $Q{SESSION} :0;
-return 2 if $R->EXPIRE('SESSION:'.$Q{SESSION},600); # index page or ajax
+	$Q{HTTP_USER_AGENT}=unpack("H*",$Q{HTTP_USER_AGENT});
+return 2 if $R->EXPIRE('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR}.$Q{HTTP_USER_AGENT},$CONF{html_session_expire}); # index page or ajax
 	my	$md5 = Digest::MD5->new;
 	$md5->add( pack( "C4", split /\./, $Q{REMOTE_ADDR} ), $Q{TOKEN});
 	$Q{DIGEST} = $md5->hexdigest if $Q{TOKEN};
 	$md5->add( pack( "C4", split /\./, $Q{REMOTE_ADDR} ), $Q{TOKEN}, $Q{INNER_TID});
-logger('LOG',"API-AUTH-DIGEST","$Q{DIGEST}") if $CONF{debug}>2;
-return $Q{DIGEST} if $Q{REQUEST_TYPE}=~/API_CMD/; # api
-	$Q{LOGIN_STATUS}= 'Session timeout' if $Q{SESSION};#if we here and defined session = timeout 
+logger('LOG',"API-AUTH-DIGEST","$Q{DIGEST} $Q{REQUEST_TYPE}") if $CONF{debug}>2;
+return $Q{DIGEST} if $Q{REQUEST_TYPE}=~/API_CMD/i; # api
+	$Q{LOGIN_STATUS}= $CONF{login_status} if $Q{SESSION};#if we here and session is defined = timeout 
 	$Q{TOKEN}= $Q{TOKEN} ? $Q{TOKEN} :0;
-	$Q{TOKEN}=$R->HEXISTS('AGENT:'.$Q{TOKEN},'name') if $Q{TOKEN};
-	$Q{DIGEST}=$md5->hexdigest if $Q{TOKEN};
-	$Q{SESSION}=$R->SETEX('SESSION:'.$Q{DIGEST},300,$Q{REMOTE_ADDR}) if $Q{TOKEN};
+	$Q{TOKEN_NAME}=$R->HGET('AGENT:'.$Q{TOKEN},'name') if $Q{TOKEN};
+	$Q{DIGEST}=$md5->hexdigest if $Q{TOKEN_NAME};
+	$Q{SESSION}=$R->SETEX('SESSION:'.$Q{DIGEST}.':'.$Q{REMOTE_ADDR}.$Q{HTTP_USER_AGENT},$CONF{html_session_expire},$Q{TOKEN}) if $Q{TOKEN_NAME};
 	$Q{SESSION}=$Q{DIGEST} if $Q{SESSION};
-return 1 if $Q{SESSION}&&$Q{TOKEN}; # redirect page
+return 2 if $R->HGET('AGENT:'.($Q{TOKEN} ? $Q{TOKEN} :0),$Q{PIN} ? $Q{PIN} :0); # index page if CN & PIN
+return 1 if $Q{SESSION}&&$Q{TOKEN_NAME}; # redirect page
 return 0;# login page
 }#END sub auth ##################################################################
 #
@@ -949,11 +928,11 @@ logger('LOG','PAYMNT-TR-SQL-RESULT',"$SQL_T_result") if $CONF{debug}==4;
 else{#else if auth
 	logger('LOG','PAYMNT-AUTH-RESULT',"NO AUTH") if $CONF{debug}==4;
 }#end esle if auth
-	$Q{imsi}=${SQL(qq[SELECT useralias from cc_card WHERE username=$CARD_NUMBER],2)}[0];
+	$Q{imsi}=${SQL(qq[SELECT useralias from cc_card WHERE username=$CARD_NUMBER],'array')}[0];
 #	logger('LOGDB',"PAYMNT","$Q{REQUEST}->{payment}{id}","$Q{imsi}",'RSP',"$CARD_NUMBER $SQL_T_result @IDs");
 	return ('PAYMNT 1',&response('payment','HTML',"200 $SQL_T_result"));
 # we cant send this sms with no auth because dont known whom
-my ($status,$code,$SMSMT_result)=CURL('sms_mt',${SQL(qq[SELECT get_uri2("pmnt_$SQL_T_result","$CARD_NUMBER",NULL,NULL,"$CARD_NUMBER","$Q{REQUEST}->{payment}{id}")],2)}[0]);
+my ($status,$code,$SMSMT_result)=CURL('sms_mt',${SQL(qq[SELECT get_uri2("pmnt_$SQL_T_result","$CARD_NUMBER",NULL,NULL,"$CARD_NUMBER","$Q{REQUEST}->{payment}{id}")],'array')}[0]);
 		$Q{email}="pay\@ruimtools.com";
 		$Q{email_sub}="PAYMENT[$Q{imsi}]: for $CARD_NUMBER $SQL_T_result";
 		$Q{email_text}="";
@@ -987,7 +966,7 @@ logger('LOG','PAYPAL-RESULT',"$result") if $CONF{debug}==4;
 #send payment confirmation to email
 #
 if ($Q{payer_email}){
-$email_text=uri_unescape(${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],2)}[0]);
+$email_text=uri_unescape(${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],'array')}[0]);
 eval {use vars qw(%Q $email $email_pri $email_text);logger('LOG','PAYPAL-GET-EMAIL',"$Q{receipt_id} $Q{payer_email} $email") if $CONF{debug}==4;;
 $email_pri=`echo "$email_text" | mail -vs 'Payment $Q{receipt_id}' $Q{payer_email} $email -- -F "CallMe! Payments" -f pay\@ruimtools.com`;
 };warn $@ if $@;  logger('LOG',"PAYPAL-SEND-EMAIL-ERROR","$@") if $@;
@@ -996,9 +975,9 @@ else{$email_pri="No email address"}#else email empty
 #
 logger('LOG','PAYPAL-SEND-EMAIL',"$email_pri") if $CONF{debug}==4;;
 # send sms notification to primary phone number
-my ($status,$code,$sms_pri)=CURL('sms_mt',${SQL(qq[SELECT get_uri2('sms_mt',NULL,"${SQL(qq[SELECT phone FROM cc_card WHERE username=$Q{'personal_number'}],2)}[0]","ruimtools",NULL,"${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],2)}[0]")],2)}[0]) if $Q{'personal_number'};
+my ($status,$code,$sms_pri)=CURL('sms_mt',${SQL(qq[SELECT get_uri2('sms_mt',NULL,"${SQL(qq[SELECT phone FROM cc_card WHERE username=$Q{'personal_number'}],'array')}[0]","ruimtools",NULL,"${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],'array')}[0]")],'array')}[0]) if $Q{'personal_number'};
 # send sms notification to additional phone number
-($status,$code,my $sms_add)=CURL('sms_mo',${SQL(qq[SELECT get_uri2('sms_mo',NULL,"+$rcpt","+447700079964","ruimtools","${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],2)}[0]")],2)}[0]) if $rcpt;
+($status,$code,my $sms_add)=CURL('sms_mo',${SQL(qq[SELECT get_uri2('sms_mo',NULL,"+$rcpt","+447700079964","ruimtools","${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],'array')}[0]")],'array')}[0]) if $rcpt;
 #
 logger('LOG','PAYPAL-SEND-RESULT',"$rcpt $sms_pri $sms_add") if $CONF{debug}==4;;
 ##
@@ -1009,66 +988,27 @@ return "$result $email_pri $sms_pri $sms_add";
 ########################### SMS section ############################################
 ### sub SMS ########################################################################
 sub SMS{
-use vars qw(%Q);#load global array
-my ($sms_result,$sms_opt,$sms_to,$sms_from,$sms_text,$sms_long_text,$type,$SQL);#just declare
-#
 logger('LOG','SMS-REQ',"$Q{USSD_DEST} $Q{USSD_EXT}") if $CONF{debug}==3;
-#$Q{USSD_DEST}=~/(\d{1})(\d{1})(\d{1})/;
-my ($page,$pg_num,$seq)=split(undef,$Q{USSD_DEST}); #page number, pages amount, message number
 #
-$Q{USSD_EXT}=~/^(\D|00)?([1-9]\d{7,15})\*(\w+)#?/;#parse msisdn
-$sms_to='+'.$2;#international format
-$sms_to="${SQL(qq[SELECT phone FROM cc_card WHERE useralias=2341800001$2],2)}[0]" if $Q{USSD_EXT}=~/^(\D)?([3-4][6-9]\d{3})\*(\w+)#?/;#check if internal
-$sms_long_text=$3;#sms text
-return 5 if length($sms_to)<5;
+($Q{PAGE},$Q{PAGES},$Q{SEQ})=split(undef,$Q{USSD_DEST}); 
+($Q{SMS_TO},$Q{MESSAGE})=split('\*',uri_unescape($Q{USSD_EXT}));
+$Q{MESSAGE}=~s/\#//;
+$Q{MSISDN}=~s/\+//;
+($Q{SMS_PREFIX},$Q{SMS_TO})=$Q{SMS_TO}=~/^(\D|00)?([1-9]\d{5,12})/;
+$Q{SMS_TO}=$R->HGET('DID',$Q{SMS_TO}) if length($Q{SMS_TO})==6;
+return 3 if length($Q{SMS_TO})<6;
 #
-logger('LOG','SMS-REQ',"$sms_to") if $CONF{debug}==4;
-my $sql_erorr_update_result=${SQL(qq[UPDATE cc_sms set status="-1" where src="$Q{MSISDN}" and flag="$page$pg_num" and seq="$seq" and dst="$sms_to" and status=0 and imsi=$Q{GIMSI}],2)}[0];#to avoid double sms HFX-970
-logger('LOG','SMS-REWRITE',"$sql_erorr_update_result") if $CONF{debug}==4;
-#store page to db
-my $INSERT_result=${SQL(qq[INSERT INTO cc_sms (`sms_id`,`src`,`dst`,`flag`,`seq`,`text`,`inner_tid`,`imsi`) values ("$Q{TRANSACTIONID}","$Q{MSISDN}","$sms_to","$page$pg_num","$seq","$sms_long_text","$Q{INNER_TID}","$Q{GIMSI}")],2)}[0];
-logger('LOG','SMS-INSERT',"$INSERT_result") if $CONF{debug}==4;
-#if insert ok
-	if ($INSERT_result>0){#if insert ok
-#if num page
-		if ($pg_num eq $page){#if only one or last page - prepare sending
-			($sms_long_text,$type,$sms_from)=split('::',${SQL(qq[SELECT get_sms_text2("$Q{MSISDN}","$sms_to",$Q{GIMSI},$seq)],2)}[0]);#get text
-			$sms_from=~s/\+//;#'+' is deprecated by C9 standart		
-				if ($sms_long_text){#if return content
-					my @multi_sms=($sms_long_text=~/.{1,168}/gs);#divide long text to 168 parts
-					foreach $sms_text (@multi_sms){#foreach parth one sms
-						logger('LOG','SMS-ENC-RESULT',"$sms_text") if $CONF{debug}==4;
-						$sms_text=uri_escape($sms_text);#url encode
-						logger('LOG','SMS-TEXT-ENC-RESULT',"$sms_text") if $CONF{debug}==4;
-						logger('LOG','SMS-SEND-PARAM',"$sms_from,$sms_to") if $CONF{debug}==4;
-#internal subscriber
-							if ($type eq 'IN'){#internal subscriber
-								logger('LOG','SMS-REQ',"INTERNAL") if $CONF{debug}==4;								
-#MSG_CODE, IMSI_, DEST_, MSN_, OPT_1, OPT_2
-my ($status,$code,$sms_result)=CURL('sms_mt',${SQL(qq[SELECT get_uri2('sms_mt',NULL,"$sms_to","$sms_from",NULL,"$sms_text")],2)}[0]);#send sms mt
-								}#if internal
-#external subscriber
-							elsif($type eq 'OUT'){
-								logger('LOG','SMS-REQ',"EXTERNAL") if $CONF{debug}==4;
-my ($status,$code,$sms_result)=CURL('sms_mo',${SQL(qq[SELECT get_uri2('sms_mo',NULL,"$sms_to","$Q{MSISDN}","$sms_from","$sms_text")],2)}[0]);#send sms mo
-								}#else external
-					}#foreach multisms
-$SQL=qq[UPDATE cc_sms set status="$sms_result" where src="$Q{MSISDN}" and dst="$sms_to" and seq="$seq" and status=0 and imsi=$Q{GIMSI}];
-					my $sql_update_result=&SQL($SQL);#update status to sending result
-					return $sms_result;		
-				}#if long text
-				else{#mark sms as error
-my $sql_update_result=${SQL(qq[UPDATE cc_sms set status="-1" where src="$Q{MSISDN}" and dst="$sms_to" and seq="$seq" and status=0 and imsi=$Q{GIMSI}],2)}[0];
-return 3;#if cant get text set status to -1
-					}#else mark sms
-				}#if num_page==page
-				else{#else multipage
-					return 2;#multi page send ussd reply 'Wait...'
-					}#end else multipage
-					}#if insert
-				else{#else not insert
-						return -1;#it seems that double tid
-					}#end else
+	my	$md5 = Digest::MD5->new;
+	$md5->add( $Q{GIMSI}, $Q{SMS_TO}, $Q{PAGES}, $Q{SEQ} );
+	$Q{DIGEST} = $md5->hexdigest;
+#
+$R->RPUSH('SMS:'.$Q{DIGEST}, $Q{MESSAGE});
+$R->EXPIRE('SMS:'.$Q{DIGEST}, 60);
+$Q{MESSAGE}=uri_escape( substr( decode('ucs2',pack("H*",join('',$R->LRANGE('SMS:'.$Q{DIGEST},0,-1)))) ,0,168) );
+#
+return (CURL('send_sms_mo',TEMPLATE('send_sms_mo'),$CONF{api2})) if $Q{PAGE}==$Q{PAGES};
+return 2;
+#my @multi_sms=($sms_long_text=~/.{1,168}/gs);#divide long text to 168 parts
 }# END sub USSD_SMS #############################################################
 #
 ### sub MO_SMS ##################################################################
@@ -1144,7 +1084,7 @@ return ('CDR_RESPONSE','XML',1);
 sub DATAAUTH{
 use vars qw(%Q);
 my ($status,$code,$balance)=CURL('get_user_info',TEMPLATE('get_user_info'));
-$Q{DATA_AUTH}=scalar ($Q{DATA_AUTH}=${SQL(qq[SELECT data_auth("$Q{MCC}","$Q{MNC}","$Q{TOTALCURRENTBYTELIMIT}","$balance")],)}[0])>0 ? $Q{DATA_AUTH} :0;
+$Q{DATA_AUTH}=scalar ($Q{DATA_AUTH}=${SQL(qq[SELECT data_auth("$Q{MCC}","$Q{MNC}","$Q{TOTALCURRENTBYTELIMIT}","$balance")],'array')}[0])>0 ? $Q{DATA_AUTH} :0;
 #$Q{DATA_AUTH}=0 if !$Qdata_auth;
 logger('LOG','DataAUTH',$Q{DATA_AUTH}) if $CONF{debug}==4;
 #$Q{SUB_CREDIT_INET}=sprintf '%.2f',(CURL('get_user_info',TEMPLATE('get_user_info'))*1.25);
@@ -1168,10 +1108,9 @@ return ('DataSession', $Q{TRANSACTIONID}, response('DataSession','HTML','200'));
 ###
 sub MSISDN_ALLOCATION{
 use vars qw(%Q);
-SQL(qq[UPDATE cc_card set phone="+$Q{MSISDN}" where useralias=$Q{GIMSI} or firstname=$Q{GIMSI}]);
-#my $sql_result=&SQL($SQL);
-$R->HSET('SUB:'.$Q{IMSI},'SUB_DID',$Q{MSISDN});
-my ($status,$code,$new_user)=CURL('new_user',TEMPLATE('new_user'));
+SQL(qq[UPDATE cc_card set phone="+$Q{MSISDN}",loginkey="$Q{TID}" where useralias=$Q{GIMSI}]);
+$R->HSET('DID',$Q{IMSI},$Q{MSISDN});
+my ($status,$code,$new_user)=CURL('voip_user_new',TEMPLATE('voip_user_new'),$CONF{api3});
 logger('LOG','msisdn_allocation',$Q{STATUS}) if $CONF{debug}==4;
 $Q{CDR_STATUS} = $Q{STATUS} eq 'Failed' ? 0: 1;
 return ('msisdn_allocation',$code,response('CDR_response','XML',$Q{CDR_STATUS}));
@@ -1261,13 +1200,15 @@ $R->PUBLISH('SDR',"NULL,$Q{INNER_TID},NULL,$Q{GIMSI},'$_[0]','$CODE',$USSD_CODE,
 ### sub GUI #########################################################
 ##
 sub GUI{
-return ('OK',1,"Content-Type: text/html\n\n".TEMPLATE($Q{ERROR_NUMBER})) if $Q{ERROR_NUMBER};
+return ('OK',3,"Content-Type: text/html\n\n".TEMPLATE($Q{ERROR_NUMBER})) if $Q{ERROR_NUMBER};
 switch (AUTH()) {
 	case 0 {$Q{PAGE}='html_login'}
-	case 1 {$Q{PAGE}='session'}
+	case 1 {$Q{PAGE}='js:session'}
 	case 2 {$Q{PAGE}='html_index'}
 	else {$Q{PAGE}='html_login'}
 }#switch page
+$Q{TOKEN_NAME}=$R->HGET('AGENT:'.$R->GET('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR}.$Q{HTTP_USER_AGENT}),'name') if not defined $Q{TOKEN_NAME};
+return ('OK',$Q{LOGIN_STATUS}=$CONF{login_not_active},"Content-Type: text/html\n\n".TEMPLATE('html_login')) if $Q{TOKEN}&&!$R->HEXISTS('AGENT:'.$Q{TOKEN},'gui');
 return ('OK',1,"Content-Type: text/html\n\n".TEMPLATE($Q{PAGE}));
 }#end GUI
 ### sub CALL_RATE #########################################################
@@ -1284,7 +1225,7 @@ if (!scalar keys %{$cache}){
 	$R->EXPIRE("RATE_CACHE:".substr($MSISDN,0,$CONF{'rate_cache_len'}),86400);
 	}#if cache
 map {$Q{$_}=$HASH{$_}} keys %HASH;#map for DID
-	$Q{'CALL_RATE'}=($HASH{'RATE'}+$HASH{'RATE'}/$CONF{'markup'})/100+$Q{MTC};
+	$Q{'CALL_RATE'}=($HASH{'RATE'}*$CONF{'markup_rate'}+$Q{MTC})/100;
 	$Q{'CALL_LIMIT'}=($Q{'CALL_LIMIT'}=floor(($Q{'SUB_CREDIT'}/$Q{'CALL_RATE'})*60))>$CONF{'max-call-time'} ? $CONF{'max-call-time'} : $Q{'CALL_LIMIT'};
 return \%HASH;# return for SPOOL
 }## sub call_rate

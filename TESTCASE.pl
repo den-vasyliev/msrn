@@ -47,13 +47,13 @@ request_type=MTSMS_CDR&timestamp=2013-07-11%2022:32:59&message_date=2013-07-11%2
 
 timestamp=&imsi=&transactionid=&destination=447700027876&from=447872200090&mcc=255&mnc=01&request_type=MT_SMS&user_balance=0.0000&carrierid=&tadig=UKRUM&globalmsisdn=447700027876&globalimsi=234180000139868&iccid=89234183800000001009
 # PING
-curl -d '<?xml version="1.0"?><api><api_cmd><Code>ping</Code><transactionid>1000</transactionid></api_cmd><api_auth><AGENT>CALLME</AGENT><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key></api_auth></api>' http://127.0.0.1
+curl -d '<?xml version="1.0"?><api><api_cmd><Code>ping</Code><transactionid>1000</transactionid></api_cmd><api_auth><token>5ae70f4dbb1aad46ea00651b6d7f69e0</token></api_auth></api>' http://127.0.0.1
 #<?xml version="1.0">
 curl -d '<?xml version="1.0"?><api><api_cmd><code>stat</code><date>2013-06</date><agent>CALLME</agent><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key><transactionid>1000</transactionid></api_cmd></api>' http://127.0.0.1
 # STAT
 curl -d '<?xml version="1.0"?><api><api_cmd><code>stat</code><date>2013-07</date><transactionid>1000</transactionid></api_cmd><api_auth><agent>CALLME</agent><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key></api_auth></api>' http://127.0.0.1
 # GET_MSRN
-curl -d '<?xml version="1.0"?><api><api_cmd><code>get_msrn</code><transactionid>1000</transactionid><imsi>23418000013986</imsi></api_cmd><api_auth><agent>CALLME</agent><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key></api_auth></api>' http://127.0.0.1
+curl -d '<?xml version="1.0"?><api><api_cmd><code>get_msrn</code><transactionid>1000</transactionid><imsi>234180000139868</imsi></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
 # SET_USER DATA DISABLE
 curl -d '<?xml version="1.0"?><api><api_cmd><code>set_user</code><sub_code>DataDisable</sub_code><agent>CALLME</agent><auth_key>fa9fec615bf0b68aa631c68b0f85628d</auth_key><transactionid>1000</transactionid><imsi>234180000139868</imsi></api_cmd></api>' http://127.0.0.1
 # SET USER ENABLE
@@ -72,6 +72,8 @@ Card Number:{$SUB_CN} Phone:{$SUB_DID} Inter:{$SUB_INTER} SMS:{$globalmsisdn} Ba
 curl -d 'calldestination=%2A100%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379605;transactionid=000000;request_type=auth_callback_sig;mcc=255;mnc=03;tadig=TEST;iot=0;iot_charge=0.0000' http://127.0.0.1
 # URL 154
 curl 'http://127.0.0.1?calldestination=%2A154%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379604;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=302;mnc=220;msisdn=%2B447700055360;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379605;iccid=89234189720000000005'
+#URL 000
+curl -d 'calldestination=*000#;carrierid=;ecc=0;globalimsi=234180000146873;globalmsisdn=447700033692;iccid=89234183800000009101;imsi=234180000146873;iot=0;iot_charge=0.0000;mcc=310;mnc=410;msisdn=+447700033692;request_type=auth_callback_sig;tadig=USACG;transactionid=197593' http://127.0.0.1
 # URL 111 VOUCHER
 curl -d 'calldestination=%2A111%2A123456789%2A1234%23;timestamp=2012-05-18%2017%3A07%3A46;globalmsisdn=447700055360;imsi=234180000379605;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' http://127.0.0.1
 # URL THRU CALL
@@ -80,6 +82,8 @@ curl -k -d 'calldestination=%2A380674014759%23;timestamp=2012-05-18%2017%3A07%3A
 curl -k -d 'calldestination=%2A110%2A012027006225758%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379604;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' http://127.0.0.1
 # URL 125
 curl -k -d 'calldestination=%2A125%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000139868;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' https://127.0.0.1
+#URL 126
+curl -k -d 'calldestination=%2A126%2A380674014759%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000139868;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' https://127.0.0.1
 # URL 111
 curl -k -d 'calldestination=%2A111%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000139868;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' https://127.0.0.1
 #

@@ -39,8 +39,9 @@ eval{
 				$SQL=qq[INSERT INTO TID values ($value)] if $topic eq 'TID';
 				$SQL=qq[CALL get_sub($value)] if $topic eq 'SUB';
 	if ($topic eq 'CONF'){ $CONF{$value}=$R->HGET('CONF',$value) }#if CONF
-	if ($topic eq 'LOG'){ print $LOGFILE $value,"\n";}#if LOG
+	if ($topic eq 'LOG'){ print $LOGFILE "$value\n";}#if LOG
 	if ($topic eq 'SUB'){
+		$dbh=DBI->connect('DBI:mysql:msrn',$CONF{db_user},$CONF{db_pass}) if $dbh->ping==0;
 	my	$sth=$dbh->prepare($SQL);
 	$sth->execute;
 		my %HASH = %{$sth->fetchrow_hashref};
@@ -48,6 +49,7 @@ eval{
 		$R->wait_one_response;
 					undef my $SQL;
 			}#if SUB
+			$dbh=DBI->connect('DBI:mysql:msrn',$CONF{db_user},$CONF{db_pass}) if $dbh->ping==0;
 			$dbh->do($SQL) if defined $SQL;
 			$R->ZADD('TID',$CONF{i}++,"[REDIS-POOL-$topic]: $value");
 			$LOGFILE->flush();
