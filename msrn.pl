@@ -3,7 +3,7 @@
 ##
 ### Copyright (C) 2013, MSRN.ME 3.0 den@msrn.me
 ##
-my $rev='MSRN.ME-190813-rev.77.1';
+my $rev='MSRN.ME-270813-rev.78.3';
 #################################################################
 # i	FCGI FCGI::ProcManager WWW::Curl::Easy (curl-devel) Redis DBI Data::Dumper XML::Bare 
 # i	JSON::XS Digest::SHA Digest::MD5 URI::Escape Text::Template  Email::Valid 
@@ -61,11 +61,11 @@ print "$CONF{rev} Ready at $$ debug level $CONF{debug} backlog $CONF{fcgi_backlo
 my $sock = FCGI::OpenSocket("$CONF{host}:$CONF{port}",$CONF{fcgi_backlog});
 	my $request = FCGI::Request(\*STDIN, \*STDOUT, \*STDERR, \%ENV, $sock);
 	    pm_manage(n_processes => $CONF{fcgi_processes});
-#	    		our $dbh = DBI->connect('DBI:mysql:msrn',$CONF{db_user},$CONF{db_pass}) or die 'MYSQL LOST CONNECTION';
 	    		our $dbh = DBI->connect('DBI:SQLite:msrn.db','','');
 		    		$dbh->do("PRAGMA synchronous = OFF");
 		    		$dbh->do("PRAGMA journal_mode = MEMORY");
-	    		our $R = Redis->new(server => 'localhost:6379',encoding => undef,) or die 'REDIS LOST CONNECTION';
+		    		$dbh->do("PRAGMA encoding = 'UTF-8'");
+	    		our $R = Redis->new(encoding => undef);
 	    		my $t0; my %Q;
  		reopen_std();
 # [ACCEPT CONNECTIONS] ****************************************
@@ -305,10 +305,9 @@ return scalar %HASH;
 	}#if
 elsif($Q{IMSI}){
 #eval {
-#	%HASH = %{SQL(qq[CALL GET_SUB($Q{GIMSI})],'hash')};
+#	%HASH = %{SQL(TEMPLATE('sql:sub'),'hash')};
 #	$R->HSET('SUB:'.$Q{IMSI},$_,$HASH{$_}, sub{}) for keys %HASH;
 #	$R->wait_all_responses;
-#	$R->EXPIRE('SUB:'.$Q{IMSI},86400);
 #	map {$Q{uc($_)}=$HASH{$_}} keys %HASH;
 #	$Q{SUB_BALANCE}=sprintf '%.2f',$Q{SUB_BALANCE};
 #	logger('LOG','OK','SUB WAS CACHED');
@@ -326,7 +325,6 @@ sub SQL{
 use vars qw($dbh);
 my $SQL=qq[$_[0]];
 my $flag=$_[1] ? $_[1] : -1;
-$SQL=qq[SELECT get_text($SQL)] if $flag eq '1';
 my ($rc, $sth, @result, $result, $new_id);
 #
 @result=(); $new_id=0;
@@ -391,7 +389,6 @@ switch ($RESPONSE_TYPE){
 	}#case HTML
 	case 'JSON'{
 		$HEAD="Content-Type: text/html\n\n";
-#		$RESPONSE=\@ARESPONSE
 		return $HEAD.encode_json $RESPONSE;
 	}#case JSON
 }#switch
@@ -418,7 +415,7 @@ case 'LOGEXPIRE'{
 #
 ########## LU_CDR ###############################################
 sub LU_CDR{ 
-	SQL(qq[UPDATE CARD SET country=CONCAT_WS(' ',(SELECT country from MCC WHERE mcc=$Q{MCC} limit 1),"$Q{TADIG}") WHERE cardnumber=$Q{SUB_CN} limit 1]);
+	SQL(TEMPLATE('sql:lu'));
 	$R->EXPIRE('OFFLINE:'.$Q{IMSI},0);
 	$R->HSETNX('DID',$Q{GLOBALMSISDN},$Q{IMSI});
 	$Q{CDR_STATUS}=1;
@@ -459,11 +456,11 @@ sub OUTBOUNDAUTH{
 ############## SUB SPOOL ######################
 sub SPOOL{
 # [INTERNAL CALL] ************************************************************************
-$Q{USSD_DEST}=CURL('get_msrn',TEMPLATE('get_msrn_inner'),$CONF{api2}) if length($Q{USSD_DEST})==6 && $Q{IMSI}!~/^$Q{USSD_DEST})/;
+$Q{USSD_DEST} = GET_MSRN('get_msrn_inner') if length($Q{USSD_DEST})==6 && $Q{IMSI}!~/^$Q{USSD_DEST})/;
 # PROCESSING CALL
 if ($Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{7,15})$/){#if correct destination number - process imsi msrn
 	$Q{MSRN}=$2 if $Q{USSD_CODE}==128;#local number call
-$Q{MSRN}=CURL('get_msrn',TEMPLATE('get_msrn'),$CONF{api2}) if not defined $Q{MSRN};
+$Q{MSRN}=GET_MSRN() if not defined $Q{MSRN};
 # [GET MSRN] ************************************************************************
 if ($Q{MSRN}=~/\d{7,15}/){
 foreach my $type ('USSD_DEST','MSRN'){
@@ -539,15 +536,15 @@ switch ($Q{USSD_CODE}){
 	case [111,123]{
 		logger('LOG','USSD-BALANCE-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
 		$Q{AMOUNT}= $Q{SUB_BALANCE}>$Q{USSD_DEST} ? $Q{USSD_DEST}/$CONF{euro_currency} : 0;#CONVERT TO EURO
-		$Q{SUB_BALANCE_INET}=sprintf '%.2f',( CURL('voip_user_balance',TEMPLATE('voip_user_balance'),$CONF{api3}) ) if $Q{USSD_DEST}=~/^\d{1,2}$/;
-		$Q{SUB_BALANCE_INET}=sprintf '%.2f',( CURL('voip_user_info',TEMPLATE('voip_user_info'),$CONF{api3})*$CONF{euro_currency} ) if !$Q{USSD_DEST};
+		$Q{SUB_BALANCE_INET}=sprintf '%.2f',( CURL('voip_user_balance',TEMPLATE('voip:user_balance'),$CONF{api3}) ) if $Q{USSD_DEST}=~/^\d{1,2}$/;
+		$Q{SUB_BALANCE_INET}=sprintf '%.2f',( CURL('voip_user_info',TEMPLATE('voip:user_info'),$CONF{api3})*$CONF{euro_currency} ) if !$Q{USSD_DEST};
 		$Q{COST}=$R->SREM('VOUCHER',$Q{USSD_DEST}) ? $CONF{voucher_amount} : $Q{AMOUNT}*$CONF{euro_currency}*-1;
 		$Q{SUB_BALANCE}=$Q{SUB_BALANCE}+$Q{COST};
 		return ('OK',$Q{SUB_BALANCE},response('MOC_RESPONSE','XML',TEMPLATE("ussd:111")));
 	}#case 111
 # [VOIP] ************************************************************************
 	case "125"{
-	$Q{SUB_PIN} ? return ('OK',1,response('MOC_RESPONSE','DEFAULT','LOGIN:sim'.$Q{SUB_CN}.'*'.$CONF{voip_domain}.' PIN:'.$Q{SUB_PIN}.TEMPLATE('voip_user_help'))) : return ('WARNING',0,response('MOC_RESPONSE','DEFAULT','NEED TO SET NEW PIN. CALL *000*5#'));
+	$Q{SUB_PIN} ? return ('OK',1,response('MOC_RESPONSE','DEFAULT','LOGIN:sim'.$Q{SUB_CN}.'*'.$CONF{voip_domain}.' PIN:'.$Q{SUB_PIN}.TEMPLATE('voip:user_help'))) : return ('WARNING',0,response('MOC_RESPONSE','DEFAULT','NEED TO SET NEW PIN. CALL *000*5#'));
 #	my ($status,$code,$new_user)=CURL('voip_user_new',TEMPLATE('voip_user_pin'),$CONF{api3});
 #	my ($status,$code,$new_user)=CURL('voip_user_new',TEMPLATE('voip_user_status'),$CONF{api3});
 	}#case 125
@@ -604,7 +601,6 @@ switch ($Q{USSD_CODE}){
 ########### CURL #############################################
 sub CURL{
 ($Q{MSG},$Q{DATA},$Q{API})=@_;
-return ('MSRN_CACHE',0,$R->GET('MSRN_CACHE:'.$Q{IMSI})) if $R->EXISTS('MSRN_CACHE:'.$Q{IMSI}) && $Q{MSG}=~/get_msrn/;
 #************************************************************************
 my %HASH=$R->HGETALL('AGENT:'.$Q{API});
 defined $HASH{auth} ? $Q{DATA}=$Q{DATA}.'&'.$HASH{auth} : undef;
@@ -646,7 +642,16 @@ else{# timeout
 	logger('LOG',"CURL-$Q{MSG}-REQUEST","Socket Timed Out") if $CONF{debug}>1;
 	return ('TIMEOUT',0);
 }#end else
-}########## END sub GET_MSRN ####################################
+}########## END sub CURL ####################################
+#
+sub GET_MSRN{
+return ('MSRN_CACHE',0,$R->GET('MSRN_CACHE:'.$Q{IMSI})) if $R->EXISTS('MSRN_CACHE:'.$Q{IMSI});
+	$Q{MSRN_TYPE} = $_[0] ? $_[0] : 'get_msrn';
+	(my $status,my $code, $Q{MSRN})=CURL('get_msrn',TEMPLATE('api:'.$Q{MSRN_TYPE}),$CONF{api2});
+	CALL_RATE($Q{MSRN},'MSRN') if $Q{MSRN} ne 'OFFLINE';
+	BILL('get_msrn');
+	return $Q{MSRN};
+}## END sub GET_MSRN ####
 #
 ##### RC_API_CMD ################################################
 sub API_CMD{
@@ -663,22 +668,23 @@ logger('LOG','API-CMD',"$Q{CODE}") if $CONF{debug}>2;
 switch ($Q{CODE}){
 # [TEST] **********************************************************************************************************
 	case 'test' {
-		return ('OK', 1, response('api_response','XML',TEMPLATE('get_msrn_inner'))) if $Q{SUB_CODE}=~/xml/;
-		return ('OK', 1, response('ping','HTML',"PONG"));
+		return ('OK', 0, response('api_response','XML',TEMPLATE('api:get_msrn_inner'))) if $Q{SUB_CODE}=~/xml/;
+		return ('OK', 0, response('ping','HTML',"PONG"));
 	}#case test
 # [PING] **********************************************************************************************************
 	case 'ping' {
 		sleep 2 if defined $Q{SUB_CODE};
-		return ('OK', 1, response('ping','HTML',"PONG")) if defined $Q{SUB_CODE};
-		return ('OK', 1, response('api_response','XML',"PONG"));
+		return ('OK', 0, response('ping','HTML',"PONG")) if defined $Q{SUB_CODE};
+		return ('OK', 0, response('api_response','XML',"PONG"));
 	}#case ping
 # [GET_MSRN] **********************************************************************************************************
 	case 'get_msrn' {
 		if ($Q{IMSI}){#if imsi defined
-			(my $status,my $code, $Q{MSRN})=CURL('get_msrn',TEMPLATE('get_msrn'),$CONF{api2});
-			CALL_RATE($Q{MSRN},'MSRN') if $Q{MSRN} ne 'OFFLINE';
-			return ('OK', $code,response('api_response','XML')) if $Q{SUB_CODE} ne 'plaintext'&&$Q{MSRN};
-			return ('OK',$code,response('get_msrn','HTML',$Q{MSRN})) if $Q{SUB_CODE} eq 'plaintext';
+#			(my $status,my $code, $Q{MSRN})=CURL('get_msrn',TEMPLATE('api:get_msrn'),$CONF{api2});
+#			CALL_RATE($Q{MSRN},'MSRN') if $Q{MSRN} ne 'OFFLINE';
+			GET_MSRN();
+			return ('OK',0,response('api_response','XML')) if $Q{SUB_CODE} ne 'plaintext' && $Q{MSRN};
+			return ('OK',0,response('get_msrn','HTML',$Q{MSRN})) if $Q{SUB_CODE} eq 'plaintext';
 		}#if imsi
 		else{#if no imsi
 			return ('IMSI UNDEFINED',-1,response('get_msrn','ERROR',"IMSI UNDEFINED $Q{IMSI} $Q{MSRN}"));
@@ -690,19 +696,19 @@ switch ($Q{CODE}){
 				$Q{IMSI} = length($Q{RDNIS})==6 ? $Q{RDNIS} : $R->HGET('DID',$Q{RDNIS});
 				($Q{IMSI},$Q{MSRN},$Q{RDNIS_ALLOW})=$Q{IMSI}=~/(\d+)\:?(\d+)?\:?(.*)?/;
 				$Q{GIMSI}= $CONF{'imsi_prefix'}.$Q{IMSI};
-				GET_SUB();#if no DID no SUB_STATUS
-		(my $status, my $code,$Q{MSRN})=CURL('get_msrn_did',TEMPLATE('get_msrn'),$CONF{api2}) if $Q{SUB_BALANCE}>0 and not defined $Q{MSRN};
+					GET_SUB();#if no DID no SUB_STATUS
+						GET_MSRN() if $Q{SUB_BALANCE}>0 and not defined $Q{MSRN};
 				$Q{DID_RESULT}=$Q{MSRN}=~/\d{7,15}/;
 				CALL_RATE($Q{MSRN},'MSRN') if $Q{DID_RESULT};
 				$Q{RATE}=$Q{RATE}+$Q{MTC};
-				BILL('get_msrn_did') if $Q{DID_RESULT};
-				logger('LOG','API-CMD-DID-[status/code/msrn/rate]',"$status $code $Q{MSRN} $Q{RATE}") if $CONF{debug}>2;
-				return ('OK',$Q{DID_RESULT},response('get_did','HTML',TEMPLATE('did:'.$Q{DID_RESULT})));
+		#		BILL('get_msrn_did') if $Q{DID_RESULT};
+				logger('LOG','API-CMD-DID-[msrn/rate]',"$Q{MSRN} $Q{RATE}") if $CONF{debug}>2;
+				return ('OK',0,response('get_did','HTML',TEMPLATE('api:did:'.$Q{DID_RESULT})));
 	}#case get_did
 # [SEND USSD] **********************************************************************************************************
 	case 'send_ussd' {#SEND_USSD
 		if ($Q{SUB_HASH}=~/$Q{TOKEN}/&&$Q{SMS_TO}=~/$Q{SUB_PHONE}/){
-		return ('OK',1,response('api_response','XML',CURL('send_ussd',TEMPLATE('send_ussd'),$CONF{api2})));
+		return ('OK',1,response('api_response','XML',CURL('send_ussd',TEMPLATE('api:send_ussd'),$CONF{api2})));
 	}else{
 		return ('ERROR',1,response('api_response','ERROR','NOT YOUR SIM'));
 	}#else AUTH
@@ -710,42 +716,45 @@ switch ($Q{CODE}){
 # [SEND SMS] **********************************************************************************************************		
 	case /send_sms/i {#SEND SMS MT	
 	if ($Q{SUB_HASH}=~/$Q{TOKEN}/&&$Q{SMS_TO}=~/$Q{SUB_PHONE}/){
-		return ('OK',1,response('api_response','XML',undef,CURL('send_sms_mt',TEMPLATE('send_sms_mt'),$CONF{api2})));
+		return ('OK',0,response('api_response','XML',undef,CURL('send_sms_mt',TEMPLATE('api:send_sms_mt'),$CONF{api2})));
 	}else{
-		return ('ERROR',1,response('api_response','ERROR','NOT YOUR SIM'));
+		return ('ERROR',0,response('api_response','ERROR','NOT YOUR SIM'));
 	}#else AUTH
 		}#case send sms mt
 # [STAT] **********************************************************************************************************
 	case 'stat' {#STAT
-		my ($i,@s);
-		my @k=$R->HKEYS('STAT:AGENT:'.$R->HGET('AGENT',$Q{DIGEST})) if $Q{IMSI}==0;
-		my @v=$R->HVALS('STAT:AGENT:'.$R->HGET('AGENT',$Q{DIGEST})) if $Q{IMSI}==0;
-		   @k=$R->HKEYS("STAT:SUB:$Q{IMSI}") if $Q{IMSI}>0;
-		   @v=$R->HVALS("STAT:SUB:$Q{IMSI}") if $Q{IMSI}>0;
-		map {$_=~/.*-\[(.*)\]-/; my $c=$1; push @s,$_.':'.$v[$i++]*$SIG{$c} if $_=~/$Q{DATE}/} @k;
-		$Q{STAT}=join("\n\r",@s);
-		return ('OK',1,response('API_RESPONSE','XML',$Q{STAT}));
+		$Q{AGENT}=$Q{IMSI} ? 'STAT:SUB:'.$Q{GIMSI} : 'STAT:AGENT:'.$Q{TOKEN};
+	my	%HASH=$R->HGETALL($Q{AGENT});
+		map{ delete $HASH{$_} if $_!~/$Q{FILTER}/}keys %HASH;
+		return ('OK',0,response('api_response','JSON',\%HASH));
 		}#case stat
 # [AJAX] **********************************************************************************************************
 	case 'ajax' {#AJAX
 		$Q{TOKEN}=$R->GET('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR}.$Q{HTTP_USER_AGENT});
 		$R->HEXISTS('TEMPLATE','ajax:'.$Q{SUB_CODE}) ? my %HASH=(aaData=>SQL(TEMPLATE('ajax:'.$Q{SUB_CODE}),'ajax')) : return GUI($R->EXPIRE('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR}.$Q{HTTP_USER_AGENT},1),$Q{SESSION}=0);
 		logger('LOG','API-CMD-AJAX',$Q{SUB_CODE}) if $CONF{debug}>2;
-		return ('OK',1,response('api_response','JSON',\%HASH));
+		return ('OK',0,response('api_response','JSON',\%HASH));
 		}#case ajax
+# [SQL] **********************************************************************************************************
+	case 'sql' {#SQL
+		return ('ERROR',1,response('api_response','HTML','FORBIDDEN')) if not defined $R->HGET('AGENT:'.$Q{TOKEN},'admin');
+		$R->HEXISTS('TEMPLATE','sql:'.$Q{SUB_CODE}) ? $Q{RESULT}=SQL(TEMPLATE('sql:'.$Q{SUB_CODE})) : return ('ERROR',1,response('api_response','ERROR','UNKNOWN SUB_CODE'));
+		logger('LOG','API-CMD-SQL',$Q{SUB_CODE}) if $CONF{debug}>2;
+		return ('OK',0,response('api_response','HTML',$Q{RESULT}-1));
+		}#case sql
 # [JS] **********************************************************************************************************
 	case 'js' {#JS
 		logger('LOG','API-CMD-JS',$Q{SUB_CODE}) if $CONF{debug}>2;
-		return ('OK',1,response('api_response','HTML',TEMPLATE('js:'.$Q{SUB_CODE})));
+		return ('OK',0,response('api_response','HTML',TEMPLATE('js:'.$Q{SUB_CODE})));
 		}#case js
 # [SET USER] **********************************************************************************************************
 	case /set_user/i {#set_user API C9
 	if ($Q{SUB_HASH}=~/$Q{TOKEN}/){		
 	$Q{SUB_CODE} = $Q{SUB_CODE}=~/^enable$/i ? 1 : $Q{SUB_CODE}=~/^disable$/i ? 0 : $Q{SUB_CODE};
-	return ('OK',1, response('api_response','XML',undef,CURL('set_user_status',TEMPLATE('set_user_status'),$R->HGET('AGENT:'.$CONF{api1},'host')))) if $Q{SUB_CODE}!~/^Data/i;
-	return ('OK',1, response('api_response','XML',undef,CURL('set_user',XML($Q{SUB_CODE}),TEMPLATE('set_user'),$R->HGET('AGENT:'.$CONF{api1},'host'))));
+	return ('OK',0, response('api_response','XML',undef,CURL('set_user_status',TEMPLATE('api:set_user_status'),$R->HGET('AGENT:'.$CONF{api1},'host')))) if $Q{SUB_CODE}!~/^Data/i;
+	return ('OK',0, response('api_response','XML',undef,CURL('set_user',XML($Q{SUB_CODE}),TEMPLATE('api:set_user'),$R->HGET('AGENT:'.$CONF{api1},'host'))));
 	}else{
-	return ('ERROR',1,response('api_response','ERROR','NOT YOUR SIM'));
+	return ('ERROR',0,response('api_response','ERROR','NOT YOUR SIM'));
 	}#else AUTH
 	}#set_user API C9
 # [ELSE SWITCH] **********************************************************************************************************
@@ -775,7 +784,7 @@ my $response_options= $RESPONSE_TYPE{$Q{REQUEST_TYPE}} ? 'XML' : 'HTML';
 		($Q{DESTINATION},$Q{MESSAGE})=split('\*',uri_unescape($Q{USSD_EXT})) if $Q{REQUEST_TYPE} eq 'SMS';
 		$Q{MESSAGE}=~s/\#// if $Q{REQUEST_TYPE} eq 'SMS';
 #************************************************************************
-	$Q{AGENT_URI}= $Q{CALLLEGID} ? TEMPLATE('agent').TEMPLATE('datasession') : $Q{TOTALCURRENTBYTELIMIT} ? TEMPLATE('agent').TEMPLATE('dataauth') : $Q{MESSAGE} ? TEMPLATE('agent').TEMPLATE('smslite') : TEMPLATE('agent') ;
+	$Q{AGENT_URI}= $Q{CALLLEGID} ? TEMPLATE('api:agent').TEMPLATE('api:datasession') : $Q{TOTALCURRENTBYTELIMIT} ? TEMPLATE('api:agent').TEMPLATE('api:dataauth') : $Q{MESSAGE} ? TEMPLATE('api:agent').TEMPLATE('api:smslite') : TEMPLATE('api:agent') ;
 	$Q{AGENT_URI}=XML() if $Q{SUB_AGENT_FORMAT} eq 'xml';
 my ($status, $code,$result)=CURL('AGENT',$Q{AGENT_URI},$Q{SUB_HASH});
 #************************************************************************
@@ -875,7 +884,7 @@ $R->RPUSH('SMS:'.$Q{DIGEST}, $Q{MESSAGE});
 $R->EXPIRE('SMS:'.$Q{DIGEST}, 60);
 $Q{MESSAGE}=uri_escape( substr( decode('ucs2',pack("H*",join('',$R->LRANGE('SMS:'.$Q{DIGEST},0,-1)))) ,0,168) );
 #
-return (CURL('send_sms_mo',TEMPLATE('send_sms_mo'),$CONF{api2})) if $Q{PAGE}==$Q{PAGES};
+return (CURL('send_sms_mo',TEMPLATE('api:send_sms_mo'),$CONF{api2})) if $Q{PAGE}==$Q{PAGES};
 return 2;
 #my @multi_sms=($sms_long_text=~/.{1,168}/gs);#divide long text to 168 parts
 }# END sub USSD_SMS #############################################################
@@ -924,8 +933,8 @@ return ('CDR_RESPONSE','XML',1);
 ### SUB DataAUTH ###################################################################
 sub DATAAUTH{
 use vars qw(%Q);
-$Q{SUB_VOIP_BALANCE}=CURL('get_user_info',TEMPLATE('get_user_info'));
-$Q{DATA_AUTH}=scalar ($Q{DATA_AUTH}=${SQL(qq[SELECT DATA_AUTH($Q{MCC}.$Q{MNC},$Q{TOTALCURRENTBYTELIMIT},$Q{SUB_VOIP_BALANCE}*$CONF{euro_currency})],'array')}[0])>0 ? $Q{DATA_AUTH} :0;
+$Q{SUB_VOIP_BALANCE}=CURL('voip_user_info',TEMPLATE('voip:user_info'),$CONF{api3});
+$R->HSET('DID',$Q{GLOBALMSISDN},$Q{IMSI});#datasession
 $Q{DATA_AUTH} = (($Q{SUB_VOIP_BALANCE}*$CONF{euro_currency}) > ($R->HGET('DATA',$Q{MCC}.$Q{MNC})*($Q{TOTALCURRENTBYTELIMIT}/(1024*1024))) ) ? 1 :0;
 logger('LOG','DataAUTH',$Q{DATA_AUTH}) if $CONF{debug}==4;
 return ('DataAUTH',$Q{DATA_AUTH},&response('RESPONSE','XML',0));
@@ -936,7 +945,7 @@ return ('DataAUTH',$Q{DATA_AUTH},&response('RESPONSE','XML',0));
 sub DATASESSION{
 return ('DataSession', 0, response('DataSession','HTML','REJECT - DUPLICATE')) if $R->SISMEMBER('DATASESSION',$Q{CALLLEGID});
 $Q{COST}=$Q{TOTALCOST}{amount}{value}/$CONF{euro_currency}*-1;#CONVERT TO EURO
-my ($status,$code,$result)=CURL('voip_user_balance',TEMPLATE('set_user_balance'),$CONF{api3});
+my ($status,$code,$result)=CURL('voip_user_balance',TEMPLATE('voip:user_balance'),$CONF{api3});
 logger('LOG','DataSession-[legid:amount]',"$Q{CALLLEGID}:$Q{COST}") if $CONF{debug}==4;
 $R->SADD('DATASESSION',$Q{CALLLEGID});
 return ('DataSession', 1, response('DataSession','HTML','200'));
@@ -946,10 +955,11 @@ return ('DataSession', 1, response('DataSession','HTML','200'));
 ### sub msisdn_allocation #########################################################
 sub MSISDN_ALLOCATION{
 use vars qw(%Q);
-SQL(qq[UPDATE CARD set phone="+$Q{MSISDN}",pin="$Q{TID}" where cardnumber=(SELECT i.cardnumber FROM IMSI i WHERE i.imsi=$Q{GIMSI})]);
-$R->HSET('DID',$Q{IMSI},$Q{MSISDN});
+SQL(TEMPLATE('sql:msisdn'));
+$R->HMSET('DID',$Q{IMSI},$Q{MSISDN},$Q{MSISDN},$Q{IMSI});#sms & datasession
+#$R->HSET('DID',$Q{MSISDN},$Q{IMSI});#datasession
 $R->HSET('SUB:'.$Q{IMSI},'SUB_DID',$Q{MSISDN});
-($Q{STATUS},$Q{CODE},$Q{RESULT})=CURL('voip_user_new',TEMPLATE('voip_user_new'),$CONF{api3});
+($Q{STATUS},$Q{CODE},$Q{RESULT})=CURL('voip_user_new',TEMPLATE('voip:user_new'),$CONF{api3});
 logger('LOG','msisdn_allocation',$Q{STATUS}) if $CONF{debug}==4;
 $Q{CDR_STATUS} = $Q{STATUS} eq 'Failed' ? 0: 1;
 return ('msisdn_allocation',$Q{CODE},response('CDR_response','XML',$Q{CDR_STATUS}));
@@ -1009,25 +1019,26 @@ return $text;
 ### SUB BILL #########################################################
 sub BILL{
 use vars qw($R);
-my $USSD_CODE= defined $Q{USSD_CODE} ? $Q{USSD_CODE} : 0;
-$Q{COST}= $Q{COST}>0 ? $Q{COST} : $SIG{$_[0]} ? $SIG{$_[0]} : 0.02;
-#my $CODE=defined $Q{CODE} ? $Q{CODE} : $Q{AMOUNT} ? 'DATA BALANCE' :$Q{REQUEST_TYPE};
-SQL(qq[PRAGMA synchronous = OFF; PRAGMA journal_mode = MEMORY; INSERT INTO BILLING values (NULL,$Q{INNER_TID},NULL,$Q{GIMSI},"$_[0]",NULL,$USSD_CODE,$Q{COST})]) if $Q{IMSI}>0;
-#$R->HINCRBYFLOAT('SUB:'.$Q{IMSI},'SUB_BALANCE',$COST*-1) if $Q{IMSI}>0;
-logger('LOG','BILLING-[USSD_CODE:COST:SIG]',"$Q{USSD_CODE}:$Q{COST}:$SIG{$_[0]}") if $CONF{debug}>2;
+$Q{TYPE}=$_[0];
+$Q{CODE} = defined $Q{USSD_CODE} ? $Q{USSD_CODE} : 0;
+$Q{CODE} = $Q{TYPE} if $Q{TYPE}=~/msrn/;
+$Q{COST}= $Q{COST}>0 ? $Q{COST} : $SIG{$_[0]} ? $SIG{$_[0]} : 0;
+SQL(TEMPLATE('sql:bill')) if $Q{IMSI}>0;
+logger('LOG','BILLING-[TYPE,USSD_CODE:COST:SIG]',"$Q{TYPE}:$Q{CODE}:$Q{COST}:$SIG{$_[0]}") if $CONF{debug}>2;
 }## end BILL
 #
 ### SUB GUI #########################################################
 sub GUI{
 return ('OK',3,"Content-Type: text/html\n\n".TEMPLATE($Q{ERROR_NUMBER})) if $Q{ERROR_NUMBER};
 switch (AUTH()) {
-	case 0 {$Q{PAGE}='html_login'}
+	case 0 {$Q{PAGE}='html:login'}
 	case 1 {$Q{PAGE}='js:session'}
-	case 2 {$Q{PAGE}='html_index'}
-	else {$Q{PAGE}='html_login'}
+	case 2 {$Q{PAGE}='html:index'}
+	else {$Q{PAGE}='html:login'}
 }#switch page
 $Q{TOKEN_NAME}=$R->HGET('AGENT:'.$R->GET('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR}.$Q{HTTP_USER_AGENT}),'name') if not defined $Q{TOKEN_NAME};
-return ('OK',$Q{LOGIN_STATUS}=$CONF{login_not_active},"Content-Type: text/html\n\n".TEMPLATE('html_login')) if $Q{TOKEN}&&!$R->HEXISTS('AGENT:'.$Q{TOKEN},'gui');
+return ('OK',$Q{LOGIN_STATUS}=$CONF{login_not_active},"Content-Type: text/html\n\n".TEMPLATE('html:login')) if $Q{TOKEN}&&!$R->HEXISTS('AGENT:'.$Q{TOKEN},'gui');
+#return ('OK',$Q{LOGIN_STATUS}=$CONF{login_not_active},"Content-Type: text/html\n\n".TEMPLATE('html:login')) if $Q{TOKEN}&&!$R->HGET('AGENT:'.$Q{TOKEN},'gui')!~/$Q{REMOTE_ADDR}/;
 return ('OK',1,"Content-Type: text/html\n\n".TEMPLATE($Q{PAGE}));
 }#end GUI
 #
