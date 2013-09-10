@@ -445,9 +445,10 @@ switch ($Q{USSD_CODE}){
 		logger('LOG','USSD-BALANCE-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
 		$Q{AMOUNT}= $Q{SUB_BALANCE}>$Q{USSD_DEST} ? $Q{USSD_DEST}/$CONF{euro_currency} : 0;#CONVERT TO EURO
 	CURL('voip_user_balance',TEMPLATE('voip:user_balance'),$CONF{api3}) if $Q{USSD_DEST}=~/^\d{1,2}$/;
+	$Q{REQUEST_TYPE}='PAY' if $R->SREM('VOUCHER',"$Q{USSD_DEST}");
 		$Q{SUB_BALANCE_INET} = sprintf '%.2f',( CURL('voip_user_info',TEMPLATE('voip:user_info'),$CONF{api3})*$CONF{euro_currency} );
-	$Q{COST}=$R->SREM('VOUCHER',$Q{USSD_DEST}) ? $CONF{voucher_amount} : $Q{AMOUNT}*$CONF{euro_currency} ? $Q{AMOUNT}*$CONF{euro_currency} :undef ;
-		$Q{SUB_BALANCE}=sprintf '%.2f',($Q{SUB_BALANCE}-$Q{COST});
+	$Q{COST}= $Q{REQUEST_TYPE} eq 'PAY' ? $CONF{voucher_amount} : $Q{AMOUNT}*$CONF{euro_currency} ? $Q{AMOUNT}*$CONF{euro_currency} :undef ;
+		$Q{USSD_DEST}=~/^\d{1,2}$/ ? $Q{SUB_BALANCE}=sprintf '%.2f',($Q{SUB_BALANCE}-$Q{COST}) : $Q{SUB_BALANCE}=sprintf '%.2f',($Q{SUB_BALANCE}+$Q{COST});
 		$Q{PARSE_RESULT}=~/SUCCESS/i ? $Q{COST} = undef : undef;
 		return ('OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111")));
 	}#case 111
