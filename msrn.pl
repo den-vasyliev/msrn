@@ -1,9 +1,9 @@
-#!/usr/bin/perl
+#!/usr/local/bin/perl
 ########## VERSION AND REVISION ################################
 ##
-### Copyright (C) 2013, MSRN.ME 3.0 den@msrn.me
+### Copyright (C) 2012-14, MSRN.ME 3.0 den@msrn.me
 ##
-my $rev='MSRN.ME-180314-rev.88.2 HFX-381 HFX-1117 HFX-563 HFX-454 HFX-582(7) HFX-1077 HFX-590';
+my $rev='MSRN.ME-200314-rev.88.4 HFX-582(7) HFX-1077 HFX-590 PP';
 #
 ## BUG: GUI double enter for non-gui agent
 ## BUG: GUI sub active even negative balance
@@ -22,7 +22,10 @@ use MIME::Base64;
 use Digest::MD5 qw(md5_hex);
 use URI::Escape;
 use Text::Template;
+use Net::SMTP;
 use Email::Valid;
+use Email::Simple;
+use Email::Send;
 use Switch;
 use POSIX;
 use Time::Local;
@@ -161,7 +164,7 @@ switch ($Q{REQUEST_OPTION}){
 		$Q{CURRENCY}=$Q{AGENTTOTALCOST}{currency}{value};
 		$Q{GIMSI} = scalar ($Q{IMSI}=$R->HGET('DID',$Q{NUMBER}))>0 ? $CONF{imsi_prefix}.$Q{IMSI} :0;
 	$Q{PARSE_RESULT}=scalar keys %Q;
-		}#elsif postdata
+		}#elsif POSTDATA
 # [UNKNOWN FORMAT] ************************************************************************
 		else{#URL ENCODED REQUEST
 		$Q{REQUEST_LINE}=~tr/\&/\;/;
@@ -169,6 +172,7 @@ switch ($Q{REQUEST_OPTION}){
 		map {$Q{uc $_}=uri_unescape($Q_tmp{$_})} keys %Q_tmp;
 		$Q{MTC} = ($Q{MCC} ? $R->HGET('MTC',$Q{MCC}.int $Q{MNC}) : 0) if defined $Q{CODE} and $Q{CODE} ne 'cdr';
 		$Q{REQUEST_TYPE}='PAY' if $Q{OPERATION_XML};
+		$Q{REQUEST_TYPE}='PAYPAL' if $Q{BUSINESS}&&$Q{PAYMENT_STATUS} eq 'Completed';
 		$Q{TRANSACTIONID}=$Q{CDR_ID} if $Q{REQUEST_TYPE}=~/msisdn_allocation/i;
 		($Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT})=
 		uri_unescape($Q{CALLDESTINATION})=~/^\*(\d{3})[\*|\#](\D{0,}\d{0,}).?(.{0,}).?/ if $Q{CALLDESTINATION};
@@ -184,6 +188,10 @@ switch ($Q{REQUEST_OPTION}){
 	$Q{GIMSI}= $Q{IMSI} ? $CONF{imsi_prefix}.$Q{IMSI} :0;
 	$R->HMSET('DID',"$Q{GLOBALMSISDN}","$Q{IMSI}","$Q{IMSI}","$Q{GLOBALMSISDN}") if $Q{GLOBALMSISDN};
 	}#xml
+# [TEXT] ************************************************************************
+	case /PLAINTEXT/ {
+	$Q{PARSE_RESULT}=$Q{REQUEST_LINE};
+	}#TEXT
 # [GET MSRN] ************************************************************************
 	case /get_msrn/ {
 		map {$Q{uc $_}=$Q{REQUEST}->{MSRN_Response}{$_}{value} if $_!~/^_?(i|z|pos|imsi|value)$/i} keys $Q{REQUEST}->{MSRN_Response};
@@ -417,13 +425,12 @@ use vars qw(%Q $R);
 switch ($Q{USSD_CODE}){
 # [SUPPORT] ************************************************************************
 	case "000"{
-		logger('LOG','USSD-SUPPORT-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
-		$Q{EMAIL}="denis\@ruimtools.com";
-		$Q{EMAIL_SUB}="NEW TT: [$Q{IMSI}:$Q{TID}]";
-		$Q{EMAIL_TEXT}='USSD-SUPPORT-REQUEST: '.$Q{USSD_DEST};
-		$Q{EMAIL_FROM}="SUPPORT";
-		$Q{EMAIL_FROM_ADDRESS}="denis\@ruimtools.com";
-		email();
+			$Q{EMAIL_FROM}="SUPPORT support\@msrn.me";
+			$Q{EMAIL_TO}="support\@msrn.me";
+			$Q{EMAIL_SUBJ}="NEW TT: [SUB:$Q{IMSI}-\#$Q{TID}]";
+			$Q{EMAIL_BODY}='USSD-SUPPORT-REQUEST '.$Q{USSD_DEST};
+			$Q{EMAIL_RESULT}=EMAIL();
+	logger('LOG','USSD-SUPPORT-REQUEST',"$Q{USSD_CODE} $Q{EMAIL_RESULT}") if $CONF{debug}==4;
 		return ('OK',1,response('MOC_RESPONSE','DEFAULT',"SUPPORT TICKET #$Q{TID} REGISTERED"));		
 			}#case 000
 # [MYNUMBER] ************************************************************************
@@ -449,11 +456,12 @@ switch ($Q{USSD_CODE}){
 	logger('LOG','USSD-BALANCE-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
 		$Q{AMOUNT} = $Q{SUB_BALANCE}>$Q{USSD_DEST} ? $Q{USSD_DEST}/$CONF{euro_currency} : 0;#CONVERT TO EURO
 	CURL('voip_user_balance',TEMPLATE('voip:user_balance'),$CONF{api3}) if $Q{USSD_DEST}=~/^\d{1,2}$/;
-		$Q{REQUEST_TYPE} = 'PAY' if $R->SREM('VOUCHER',"$Q{USSD_DEST}");#check if voucher exists
+		$Q{REQUEST_TYPE} = 'PAY' if $R->HEXISTS('VOUCHER_CACHE',"$Q{USSD_DEST}");#CHECK IF VOUCHER EXISTS
 	$Q{SUB_BALANCE_INET} = sprintf '%.2f',( CURL('voip_user_info',TEMPLATE('voip:user_info'),$CONF{api3})*$CONF{euro_currency} );
-	$Q{COST} = $Q{REQUEST_TYPE} eq 'PAY' ? $CONF{voucher_amount} : $Q{AMOUNT}*$CONF{euro_currency} ? $Q{AMOUNT}*$CONF{euro_currency} :undef ;
+	$Q{COST} = $Q{REQUEST_TYPE} eq 'PAY' ? $R->HGET('VOUCHER_CACHE',"$Q{USSD_DEST}") : $Q{AMOUNT}*$CONF{euro_currency} ? $Q{AMOUNT}*$CONF{euro_currency} :undef ;
 	$Q{SUB_BALANCE} = $Q{USSD_DEST}=~/^\d{1,2}$/ ? sprintf '%.2f',($Q{SUB_BALANCE}-$Q{COST}) : sprintf '%.2f',($Q{SUB_BALANCE}+$Q{COST});
 		$Q{PARSE_RESULT} =~/SUCCESS/i ? $Q{COST} = undef : undef;
+		$R->HDEL('VOUCHER_CACHE',"$Q{USSD_DEST}") if $Q{REQUEST_TYPE} eq 'PAY';
 		return ('OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111")));
 	}#case 111
 # [VOIP] ************************************************************************
@@ -647,67 +655,37 @@ $Q{PAY_STATUS}=~/success/ ? $Q{PAY_RESULT}=BILL( 'PAY',$Q{PAY_ORDER_ID},
 							$R->DEL('PAY_CACHE:'.$Q{PAY_ORDER_ID}) ) : undef;
 #[RESULT]***********************************************************************
 map{$R->HMSET('PAY_DONE:'.$Q{PAY_ORDER_ID},"$_","$Q{$_}") if $_=~/^PAY_/} keys %Q;
-#sender_phone email
+	($Q{EMAIL_FROM},$Q{EMAIL_TO},$Q{EMAIL_SUBJ})=split(',',TEMPLATE('email:pay')); EMAIL();
 return('OK',0,response('api_response','XML',"PAYMENT $Q{PAY_ORDER_ID} IS PROCESSED"));
 }#end PAY
+#
 ########################### PAYPAL section #######################################
 sub PAYPAL{
-$Q{memo}=~tr/[\,,\;,\:," ","-",\n]/\;/; 
-my @Memo=split(";",$Q{memo});
-our ($rcpt, $email, $email_pri, $email_text);
-$Q{receipt_id}=$Q{txn_id} if !$Q{receipt_id};
-# 
-foreach my $memo(@Memo){
-	my $result=""; 
-	next if $memo eq ""; 
-	if ($memo=~/([_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4}))/) {$email=Email::Valid->address(-address  => $1, -tldcheck => 1); next} 
-	if ($memo=~/\+?(\d{11,15})/){ $rcpt=$1; next} 
-	if($memo=~/(\d{10})/){$Q{'personal_number'}=$1; next}
-}#foreach
-#
-my $SQL=qq[INSERT INTO cc_paypal (memo,mc_gross,item_number,tax,payer_id,payment_status,first_name,mc_fee,personal_number,business,num_cart_items,payer_email,btn_id1,txn_id,receipt_id,payment_type,last_name,item_name,receiver_email,payment_fee,quantity,receiver_id,txn_type,mc_gross_1,mc_currency,residence_country,transaction_subject,payment_gross,ipn_track_id) values ("$Q{memo}","$Q{mc_gross}","$Q{item_number}","$Q{tax}","$Q{payer_id}","$Q{payment_status}","$Q{first_name}","$Q{mc_fee}","$Q{personal_number}","$Q{business}","$Q{num_cart_items}","$Q{payer_email}","$Q{btn_id}","$Q{txn_id}","$Q{receipt_id}","$Q{payment_type}","$Q{last_name}","$Q{item_name}","$Q{receiver_email}","$Q{payment_fee}","$Q{quantity}","$Q{receiver_id}","$Q{txn_type}","$Q{mc_gross}","$Q{mc_currency}","$Q{residence_country}","$Q{transaction_subject}","$Q{payment_gross}","$Q{ipn_track_id}")];
-my $result=SQL($SQL);
-#
-logger('LOG','PAYPAL-RESULT',"$result") if $CONF{debug}==4;
-#
-#send payment confirmation to email
-#
-if ($Q{payer_email}){
-$email_text=uri_unescape(${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],'array')}[0]);
-eval {use vars qw(%Q $email $email_pri $email_text);logger('LOG','PAYPAL-GET-EMAIL',"$Q{receipt_id} $Q{payer_email} $email") if $CONF{debug}==4;;
-$email_pri=`echo "$email_text" | mail -vs 'Payment $Q{receipt_id}' $Q{payer_email} $email -- -F "CallMe! Payments" -f pay\@ruimtools.com`;
-};warn $@ if $@;  logger('LOG',"PAYPAL-SEND-EMAIL-ERROR","$@") if $@;
-}#if email
-else{$email_pri="No email address"}#else email empty
-#
-logger('LOG','PAYPAL-SEND-EMAIL',"$email_pri") if $CONF{debug}==4;;
-# send sms notification to primary phone number
-my ($status,$code,$sms_pri)=CURL('sms_mt',${SQL(qq[SELECT get_uri2('sms_mt',NULL,"${SQL(qq[SELECT phone FROM cc_card WHERE username=$Q{'personal_number'}],'array')}[0]","ruimtools",NULL,"${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],'array')}[0]")],'array')}[0]) if $Q{'personal_number'};
-# send sms notification to additional phone number
-($status,$code,my $sms_add)=CURL('sms_mo',${SQL(qq[SELECT get_uri2('sms_mo',NULL,"+$rcpt","+447700079964","ruimtools","${SQL(qq[SELECT paypal("$Q{txn_id}","$result")],'array')}[0]")],'array')}[0]) if $rcpt;
-#
-logger('LOG','PAYPAL-SEND-RESULT',"$rcpt $sms_pri $sms_add") if $CONF{debug}==4;;
-##
-return "$result $email_pri $sms_pri $sms_add";
+	$Q{REQUEST_LINE}=~tr/\;/\&/;
+	if (CURL('PLAINTEXT', $Q{REQUEST_LINE}.'&cmd=_notify-validate', $CONF{api_paypal}) eq 'VERIFIED'){
+		$Q{VOUCHER_CODE}=int(rand(10000000000))+1000000000;
+			$R->HSET('VOUCHER_CACHE', "$Q{VOUCHER_CODE}", "$Q{MC_GROSS}");
+			($Q{EMAIL_FROM},$Q{EMAIL_TO},$Q{EMAIL_CC},$Q{EMAIL_SUBJ},$Q{EMAIL_BODY})=split(',',TEMPLATE('email:paypal'));
+				$Q{EMAIL_RESULT}=EMAIL();
+		}#if VERIFIED
+	logger('LOG','PAYPAL-RESULT',"$Q{VOUCHER_CODE} $Q{MC_GROSS} $Q{EMAIL_RESULT}") if $CONF{debug}>0;
+return ('PayPal', 0, response('PayPal','HTML',"$Q{EMAIL_RESULT}"));
 }#PAYPAL
 ## END sub PAYPAL ##################################################################		
 #
 ### SUB EMAIL #########################################################
 sub EMAIL{
-if ($Q{email_STATUS}){
-		$Q{EMAIL}="denis\@ruimtools.com";
-		$Q{EMAIL_SUB}="Subscriber $Q{IMSI} STATUS: $Q{EMAIL_STATUS}";
-		$Q{EMAIL_TEXT}="Receive request $Q{USSD_CODE} $Q{USSD_DEST} $Q{USSD_EXT} with incorrect subscriber status";
-		$Q{EMAIL_FROM}="BILLING";
-		$Q{EMAIL_FROM_ADDRESS}="denis\@ruimtools.com";
-	}#if status tmpl
-#************************************************************************
-eval {use vars qw(%Q);logger('LOG','EMAIL',"$Q{EMAIL} $Q{EMAIL_SUB} $Q{EMAIL_TEXT} $Q{EMAIL_FROM} $Q{EMAIL_FROM_ADDRESS}") if $CONF{debug}==4;
-my $email_result=`echo "$Q{EMAIL_TEXT}" | mail -s '$Q{EMAIL_SUB}' $Q{EMAIL} -- -F "$Q{email_FROM}" -f $Q{EMAIL_FROM}`;
-return $email_result;
-};warn $@ if $@;  logger('LOG',"SEND-EMAIL-ERROR","$@") if $@;
-#************************************************************************
-}## END SUB EMAIL
+	my $email = Email::Simple->create(
+      header => [
+        From    => "$Q{EMAIL_FROM}",
+        To      => "$Q{EMAIL_TO}",
+		BCC      => "$Q{EMAIL_CC}",
+        Subject => "$Q{EMAIL_SUBJ}", ],
+ 		     body => "$Q{EMAIL_BODY}",);
+#
+my $result = send SMTP => $email, 'localhost';
+return $result;
+}## END SUB EMAIL ####################################################
 #
 ### SUB XML #########################################################
 sub XML{
@@ -1019,6 +997,7 @@ $Q{PAYTAG}=~/^\d{6}$/ && PAY() ? return('OK',0,response('PAY','JSON',$Q{PAYMENT}
 	}# 2 index
 	else {
 		$Q{REQUEST_TYPE} eq "PAY" ? return PAY() :undef;
+		$Q{REQUEST_TYPE} eq "PAYPAL" ? return PAYPAL() :undef;
 		return ('OK',0,"Content-Type: text/html\n\n".TEMPLATE('html:login'))}
 }#switch page
 return ('OK',-1,"Content-Type: text/html\n\n".TEMPLATE('html:login'),$R->EXPIRE('SESSION:'."$Q{SESSION}".':'.$Q{REMOTE_ADDR},0) ) if $Q{TOKEN_PIN} && ( not $R->HEXISTS('AGENT:'.$Q{TOKEN_PIN},'gui') || $R->HEXISTS('AGENT:'.$Q{TOKEN_PIN},"$Q{REMOTE_ADDR}") );
