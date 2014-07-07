@@ -12,9 +12,11 @@ curl -d '<?xml version="1.0"?><api><api_cmd><Code>ping</Code><transactionid>1000
 curl -d '<?xml version="1.0"?><api><api_cmd><Code>sql</Code><sub_code>cache_template</sub_code><transactionid>1000</transactionid></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
 #<?xml version="1.0">
 # STAT
-curl -d '<?xml version="1.0"?><api><api_cmd><code>stat</code><filter>2013-09</filter><transactionid>1000</transactionid></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
+curl -d '<?xml version="1.0"?><api><api_cmd><code>stat</code><filter>2014-05</filter><transactionid>1000</transactionid></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
+##
+curl -d '<?xml version="1.0"?><api><api_cmd><code>stat</code><filter>2014-04</filter><imsi>234180000379608</imsi><transactionid>1000</transactionid></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
 # GET_MSRN
-curl -d '<?xml version="1.0"?><api><api_cmd><code>get_msrn</code><transactionid>1000</transactionid><imsi>234180000139868</imsi></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
+curl -d '<?xml version="1.0"?><api><api_cmd><code>get_msrn</code><transactionid>1000</transactionid><imsi>234180000148269</imsi></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
 # SET_USER DATA DISABLE
 curl -d '<?xml version="1.0"?><api><api_cmd><code>set_user</code><sub_code>DataEnable</sub_code><transactionid>1000</transactionid><timestamp>2012-06-13%2017%3A53%3A45</timestamp><imsi>234180000139868</imsi></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
 # SET USER ENABLE
@@ -33,7 +35,7 @@ curl 'http://127.0.0.1?calldestination=%2A112%2A379602%2A82F010001F00CF%23;times
 curl -d 'request_type=api_cmd;code=ajax;sub_code=rate;token=fa9fec615bf0b68aa631c68b0f85628d' http://127.0.0.1
 #
 # URL 100
-curl -d 'calldestination=%2A100%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000140092;transactionid=000000;request_type=auth_callback_sig;mcc=255;mnc=03;tadig=TEST;iot=0;iot_charge=0.0000' http://127.0.0.1
+curl -d 'calldestination=%2A100%23;imsi=234180000139993;transactionid=000000;request_type=auth_callback_sig' http://127.0.0.1
 #
 curl -d 'calldestination=%2A100%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000139868;GlobalMSISDN=447700027876;transactionid=000000;request_type=auth_callback_sig;mcc=255;mnc=03;tadig=TEST;iot=0;iot_charge=0.0000' http://127.0.0.1
 # URL 154
@@ -67,9 +69,9 @@ curl -d 'request_type=OutboundAUTH&CallID=93237489&MSISDN=447700027876&IMSI=2341
 ##
 sub SIG CALLBACK {}
 #
-curl 'http://127.0.0.1?calldestination=%2A100%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379604;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700055360;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379605;iccid=89234189720000000005'
+curl -d 'calldestination=%2A112%2A80674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000139868;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=310;mnc=160;tadig=TEST' 127.0.0.1
 #
-curl 'http://127.0.0.1?calldestination=%2A112%2A380674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379604;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700055360;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379605;iccid=89234189720000000005'
+curl 'http://127.0.0.1?calldestination=%2A112%2A80674014759%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000139868;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700055360;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379605;iccid=89234189720000000005'
 #
 ### END SIG CALLBACK
 #
@@ -89,7 +91,7 @@ curl -d 'request_type=SMSContent_CDR;sms_type=MO;timestamp=2012-06-19%2019%3A29%
 #
 sub GET DID {}
 #
-curl 'http://127.0.0.1?request_type=api_cmd&code=get_did&rdnis=380947112288&transactionid=6758765&token=fa9fec615bf0b68aa631c68b0f85628d&options=cleartext'
+curl 'http://127.0.0.1?request_type=api_cmd&code=get_did&rdnis=380947114759&transactionid=6758765&token=fa9fec615bf0b68aa631c68b0f85628d&options=cleartext'
 #
 ### END SUB GET DID
 #
@@ -100,7 +102,7 @@ curl 'http://127.0.0.1?request_type=api_cmd;msisdn=1;imsi=234180000379608;code=1
 #
 sub LU_CDR{}
 #
-curl -d 'request_type=LU_CDR;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379604;transactionid=184863;carrierid=;mcc=255;mnc=01;msisdn=%2B447700027876;tadig=MTSUA;globalmsisdn=447700079964;globalimsi=234180000379604;iccid=89234189720000000088'
+curl -d 'request_type=LU_CDR;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000146686;transactionid=184863;carrierid=;mcc=255;mnc=03;msisdn=%2B447700018208;tadig=USAW6' 127.0.0.1
 
 curl 'http://127.0.0.1?request_type=LU_CDR&timestamp=2013-09-03%2015:52:08&transactionid=119561&cdr_id=123456&carrierid=12&mcc=234&mnc=30&imsi=234180000179622&msisdn=447978300000&vlr=447953710126&tadig=GBRME&errorcode=0&camelallowed=True&camelphase=2'
 
@@ -144,7 +146,7 @@ curl 'http://127.0.0.1?card_number=9671645459'
 #
 sub MSISDN allocation {}
 #
-curl 'http://127.0.0.1?request_type=msisdn_allocation;cdr_id=43137;timestamp=2013-09-15%2007%3A47%3A35;carrierid=;IMSI=234180000139867;MSISDN=unknown'
+curl 'http://127.0.0.1?request_type=msisdn_allocation;cdr_id=43137;timestamp=2013-09-15%2007%3A47%3A35;carrierid=;IMSI=234180000148303;MSISDN=unset'
 
 
 ### END MSISDN allocation
@@ -245,3 +247,14 @@ request_type=send_sms&timestamp={$TIMESTAMP}&transaction_id={$TID}&smsto=%2B{$SM
 request_type=MTSMS_CDR&timestamp=2013-07-11%2022:32:59&message_date=2013-07-11%2022:32:59&transactionid=20130711223259&cdr_id=183200&carrierid=&mcc=255&mnc=01&imsi=234180000139868&msisdn=447700027876&IOT=0&srcgt=447872200090&route=&allow=no&smsfrom=447872200090&smsc=UKRUM&reseller_charge=0.00&client_charge=0.00&user_charge=0.00&user_balance=6.00"
 
 timestamp=&imsi=&transactionid=&destination=447700027876&from=447872200090&mcc=255&mnc=01&request_type=MT_SMS&user_balance=0.0000&carrierid=&tadig=UKRUM&globalmsisdn=447700027876&globalimsi=234180000139868&iccid=89234183800000001009
+
+1|2f89b79e5ad5dc9d8afdefafd595a120|C4|https://194.54.172.110/WebAPI/version400.aspx|2013-08-04 18:57:04|den.admin|RuimT00l5||\0|1.0|
+2|4f2b0a10af40e53e98b981b629a90431|C9|http://194.54.172.115/WebAPI/C9API.aspx|2013-08-04 19:13:29|||agentusername=den.admin&carrierid=1&password=RuimT00l5|\0|1.0|
+3|5ae70f4dbb1aad46ea00651b6d7f69e0|AVS Trans||2013-08-09 21:45:29|||||1.5|
+4|fa9fec615bf0b68aa631c68b0f85628d|CALLME||2013-08-09 21:47:35|||||1.2|
+5|479fce0294587a07b33e53d8d32f4419|RUIMTOOLS|https://91.218.212.209:4030/cgi-bin/resale.cgi|2013-08-04 19:15:41||||\0|1.0|
+6|d73e3598d399aa732541edaa75fa4adc|ZADARMA|https://zadarma.com/ruimtools/requests|2013-08-09 21:03:21|||access_key=tF4pq2lU09GxP5vXsacu83fSoLkW5aVf|\0|1.0|
+7|a00c93b91cd8acde10af6320a14d2689|FIAT500||2013-08-04 19:25:40|||||1.0|
+8|df8568f4ad86175a1ccc9967bea2f384|VOIPUA|https://217.20.166.94:3801/roaming.asp|2013-08-04 19:26:27||||\0|2.0|
+9|aa2fb69ae3b63498b11a82b1f90d23e2|VIC|https://77.72.173.130/API/Request.ashx?|2013-08-04 19:27:34|||username=callmeroaming*callmeroaming&password=f1ynyguo4hd2g8ga|\0|1.0|
+13|0738b3c0454d769df95441bb7fe8cb1f|ALTERNATIVA|null|2013-11-11 09:43:00|null|null|null|\0|1.0|null
