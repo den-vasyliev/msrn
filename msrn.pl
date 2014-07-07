@@ -3,7 +3,7 @@
 ##
 ### Copyright (C) 2012-14, MSRN.ME 3.0 den@msrn.me
 ##
-my $rev='MSRN.ME-200314-rev.88.4 HFX-582(7) HFX-1077 HFX-590 PP';
+my $rev='MSRN.ME-070714-rev.91.1 HFX-932';
 #
 ## BUG: GUI double enter for non-gui agent
 ## BUG: GUI sub active even negative balance
@@ -163,14 +163,14 @@ switch ($Q{REQUEST_OPTION}){
 		$Q{COST}=$Q{AGENTTOTALCOST}{amount}{value};
 		$Q{CURRENCY}=$Q{AGENTTOTALCOST}{currency}{value};
 		$Q{GIMSI} = scalar ($Q{IMSI}=$R->HGET('DID',$Q{NUMBER}))>0 ? $CONF{imsi_prefix}.$Q{IMSI} :0;
-	$Q{PARSE_RESULT}=scalar keys %Q;
+		$Q{PARSE_RESULT}=scalar keys %Q;
 		}#elsif POSTDATA
 # [UNKNOWN FORMAT] ************************************************************************
 		else{#URL ENCODED REQUEST
 		$Q{REQUEST_LINE}=~tr/\&/\;/;
 		my %Q_tmp=split /[;=]/,$Q{REQUEST_LINE}; 
 		map {$Q{uc $_}=uri_unescape($Q_tmp{$_})} keys %Q_tmp;
-		$Q{MTC} = ($Q{MCC} ? $R->HGET('MTC',$Q{MCC}.int $Q{MNC}) : 0) if defined $Q{CODE} and $Q{CODE} ne 'cdr';
+		$Q{MTC} = ($Q{MCC} ? $R->HGET('MTC',$Q{MCC}.int $Q{MNC}) : 0) if (defined $Q{CODE} and $Q{CODE} ne 'cdr') || ($Q{REQUEST_TYPE}=~/AUTH_CALLBACK_SIG/i);
 		$Q{REQUEST_TYPE}='PAY' if $Q{OPERATION_XML};
 		$Q{REQUEST_TYPE}='PAYPAL' if $Q{BUSINESS}&&$Q{PAYMENT_STATUS} eq 'Completed';
 		$Q{TRANSACTIONID}=$Q{CDR_ID} if $Q{REQUEST_TYPE}=~/msisdn_allocation/i;
@@ -187,6 +187,7 @@ switch ($Q{REQUEST_OPTION}){
 	$Q{IMSI}= $Q{IMSI} ? substr($Q{IMSI},-6,6) :0;
 	$Q{GIMSI}= $Q{IMSI} ? $CONF{imsi_prefix}.$Q{IMSI} :0;
 	$R->HMSET('DID',"$Q{GLOBALMSISDN}","$Q{IMSI}","$Q{IMSI}","$Q{GLOBALMSISDN}") if $Q{GLOBALMSISDN};
+	$R->HSET('SUB:'.$Q{IMSI},'SUB_MNO',$Q{MCC}.int $Q{MNC}) if $Q{MCC}>0;
 	}#xml
 # [TEXT] ************************************************************************
 	case /PLAINTEXT/ {
@@ -425,10 +426,7 @@ use vars qw(%Q $R);
 switch ($Q{USSD_CODE}){
 # [SUPPORT] ************************************************************************
 	case "000"{
-			$Q{EMAIL_FROM}="SUPPORT support\@msrn.me";
-			$Q{EMAIL_TO}="support\@msrn.me";
-			$Q{EMAIL_SUBJ}="NEW TT: [SUB:$Q{IMSI}-\#$Q{TID}]";
-			$Q{EMAIL_BODY}='USSD-SUPPORT-REQUEST '.$Q{USSD_DEST};
+		($Q{EMAIL_FROM},$Q{EMAIL_TO},$Q{EMAIL_SUBJ},$Q{EMAIL_BODY})=split(',',TEMPLATE('email:support'));			
 			$Q{EMAIL_RESULT}=EMAIL();
 	logger('LOG','USSD-SUPPORT-REQUEST',"$Q{USSD_CODE} $Q{EMAIL_RESULT}") if $CONF{debug}==4;
 		return ('OK',1,response('MOC_RESPONSE','DEFAULT',"SUPPORT TICKET #$Q{TID} REGISTERED"));		
@@ -568,7 +566,7 @@ return $R->GET('MSRN_CACHE:'.$Q{IMSI}) if $R->EXISTS('MSRN_CACHE:'.$Q{IMSI});
 		$R->SETNX("STAT:AGENT:$Q{REMOTE_ADDR}:".substr($Q{TIMESTAMP},0,13).":$Q{MSRN_TYPE}","$CONF{api_threshold}");
 		$R->DECR("STAT:AGENT:$Q{REMOTE_ADDR}:".substr($Q{TIMESTAMP},0,13).":$Q{MSRN_TYPE}")>0 ? undef : return ('ERROR',-1,response('api_response','ERROR',"API $Q{MSRN_TYPE} THRESHOLD REACHED"));	
 	(my $status,my $code, $Q{MSRN})=CURL('get_msrn',TEMPLATE('api:'.$Q{MSRN_TYPE}),$CONF{api2});
-	$Q{MTC} = $Q{MCC}>0 ? $R->HGET('MTC',$Q{MCC}.int $Q{MNC}) : 0;
+	$Q{MTC} = $Q{MCC}>0 ? $R->HGET('MTC',$Q{MCC}.int $Q{MNC}) : $Q{SUB_MNO}>0 ? $R->HGET('MTC',$Q{SUB_MNO}) : 0;
 	$Q{MSRN}=~/\d{7,15}/ ? $R->SETEX('MSRN_CACHE:'.$Q{IMSI},10,$Q{MSRN}) : $R->SETEX('MSRN_CACHE:'.$Q{IMSI},300,'OFFLINE');
 	CALL_RATE($Q{MSRN},'MSRN') if $Q{MSRN} ne 'OFFLINE';
 	BILL('MSRN');
@@ -645,7 +643,7 @@ $Q{SIGNATURE} eq $Q{PAY_SIGN} ? XML_PARSE($Q{XML_DECODE},'pay') : return ('NO AU
 scalar ( $Q{PAY_SESSION}=$R->GET('PAY_CACHE:'.$Q{PAY_ORDER_ID}) ) ? undef : 
 	return ('UNKNOWN PAYMENT',0,response('api_response','HTML',TEMPLATE('html:pay_unknown')));
 #[REMOTE_ADDR]*******************************************************************
-AUTH('PAY:'.$Q{REMOTE_ADDR})&&($Q{PAY_ACTION}=~/server_url/) ? undef : 
+AUTH('PAY:'.$Q{REMOTE_ADDR})&&($Q{PAY_STATUS}=~/success/) ? undef : 
 	return ( 'PAYMENT CONFIRMATION',0,response('api_response','HTML',TEMPLATE('html:pay_'.$Q{PAY_STATUS})) );
 #[PROCESSING]********************************************************************
 $Q{PAY_STATUS}=~/success/ ? $Q{PAY_RESULT}=BILL( 'PAY',$Q{PAY_ORDER_ID},
@@ -662,11 +660,12 @@ return('OK',0,response('api_response','XML',"PAYMENT $Q{PAY_ORDER_ID} IS PROCESS
 ########################### PAYPAL section #######################################
 sub PAYPAL{
 	$Q{REQUEST_LINE}=~tr/\;/\&/;
-	if (CURL('PLAINTEXT', $Q{REQUEST_LINE}.'&cmd=_notify-validate', $CONF{api_paypal}) eq 'VERIFIED'){
+	if ((CURL('PLAINTEXT', $Q{REQUEST_LINE}.'&cmd=_notify-validate', $CONF{api_paypal}) eq 'VERIFIED')&&($R->SISMEMBER('PAYPAL_PEYMENTS',"$Q{TXN_ID}") == 0)){
 		$Q{VOUCHER_CODE}=int(rand(10000000000))+1000000000;
 			$R->HSET('VOUCHER_CACHE', "$Q{VOUCHER_CODE}", "$Q{MC_GROSS}");
 			($Q{EMAIL_FROM},$Q{EMAIL_TO},$Q{EMAIL_CC},$Q{EMAIL_SUBJ},$Q{EMAIL_BODY})=split(',',TEMPLATE('email:paypal'));
 				$Q{EMAIL_RESULT}=EMAIL();
+				$R->SADD('PAYPAL_PEYMENTS',"$Q{TXN_ID}");
 		}#if VERIFIED
 	logger('LOG','PAYPAL-RESULT',"$Q{VOUCHER_CODE} $Q{MC_GROSS} $Q{EMAIL_RESULT}") if $CONF{debug}>0;
 return ('PayPal', 0, response('PayPal','HTML',"$Q{EMAIL_RESULT}"));
@@ -930,15 +929,15 @@ switch ($Q{CODE}){
 #-- STANDARD CALL
 if ($Q{DCONTEXT} eq "callme_reg" and $Q{LASTAPP} eq 'Dial' and $Q{DISPOSITION} eq 'ANSWERED' and ($Q{BILLSEC}>0 or $Q{MTC}>0)){
 #-- charging (LegA duration full min * MTC + LegA duration sec * RATEA/60  + LegB billsec * RATEB/60)/100 = call cost in $
-$Q{COST} =sprintf '%.2f', ( (  ( (ceil($Q{DURATION}/60)*$Q{MTC}?$Q{MTC}:0 ) )+$Q{DURATION}*($Q{RATEA}/60?$Q{RATEA}/60:0) )+$Q{BILLSEC}*($Q{RATEB}/60?$Q{RATEB}/60:0) ) /100;
+$Q{COST} =sprintf '%.2f', ( (  ( (ceil($Q{DURATION}/60)* ($Q{MTC}?$Q{MTC}:0) ) )+$Q{DURATION}*($Q{RATEA}/60?$Q{RATEA}/60:0) )+$Q{BILLSEC}*($Q{RATEB}/60?$Q{RATEB}/60:0) ) /100;
 		logger('LOG','CDR-STANDARD',$Q{COST});
 }#-- DID call
 elsif ($Q{DCONTEXT} eq "did_reg" and $Q{LASTAPP} eq 'Dial' and $Q{DISPOSITION} eq "ANSWERED" and $Q{BILLSEC}>0){
-$Q{COST} = sprintf '%.2f', ( ((ceil(($Q{BILLSEC}/60)*($Q{MTC}?$Q{MTC}:0))))+($Q{BILLSEC}*($Q{RATEA}/60?$Q{RATEA}/60:0)) )/100;
+$Q{COST} = sprintf '%.2f', ( ((ceil(($Q{BILLSEC}/60)* ($Q{MTC}?$Q{MTC}:0) )))+($Q{BILLSEC}*($Q{RATEA}/60?$Q{RATEA}/60:0)) )/100;
 		logger('LOG','CDR-DID',$Q{COST});
 }#-- CALLBACK call with MTC
 elsif ($Q{DCONTEXT} eq "callme_reg" and $Q{LASTAPP} eq 'ForkCDR'){
-$Q{COST} =sprintf '%.2f', ( (ceil( $Q{BILLSEC}/60)*$Q{MTC}?$Q{MTC}:0 ) )/100;
+$Q{COST} =sprintf '%.2f', ( (ceil( $Q{BILLSEC}/60)* ($Q{MTC}?$Q{MTC}:0) ) )/100;
 		logger('LOG','CDR-NOTANSWERED',$Q{COST});
 }else {$Q{COST}=0; logger('LOG','CDR-UNKNOWN',$Q{COST});}
 #STANDARD
@@ -951,7 +950,7 @@ SQL(TEMPLATE('sql:cdr')) if $Q{COST}>0;
 $Q{COSTA}=$Q{COST};
 #-- INTERNAL
 if ($Q{DCONTEXT} eq 'callme_reg' and $Q{LASTAPP} eq 'Dial' and $Q{DISPOSITION} eq 'ANSWERED' and ($Q{BILLSEC}>0 or $Q{MTC}>0) and $Q{DSTCHANNEL} ne '' and $Q{ACCOUNTCODEB} ne ''){
-$Q{COST} = sprintf '%.2f', ( (ceil ($Q{BILLSEC}/60)*$Q{MTCB}?$Q{MTCB}:0) + ($Q{BILLSEC}*$Q{RATEB}/60?$Q{RATEB}:0) )/100;
+$Q{COST} = sprintf '%.2f', ( (ceil ($Q{BILLSEC}/60)* ($Q{MTCB}?$Q{MTCB}:0) ) + ($Q{BILLSEC}*$Q{RATEB}/60?$Q{RATEB}:0) )/100;
 $Q{IMSI}=$Q{ACCOUNTCODEB};
 $Q{GIMSI}=$CONF{imsi_prefix}.$Q{IMSI};
 $Q{DCONTEXT}='did_reg';
@@ -1013,7 +1012,7 @@ sub SIG{
 ########## LU_CDR ###############################################
 sub LU_CDR{ 
 	SQL(TEMPLATE('sql:lu'));
-	$R->EXPIRE('OFFLINE:'.$Q{IMSI},0);
+	$R->EXPIRE('OFFLINE:'.$Q{IMSI},0);	
 	$Q{CDR_STATUS}=1;
 	return ('OK',"$Q{SUB_ID}:$Q{MCC}:$Q{MNC}:$Q{TADIG}",response('CDR_RESPONSE','XML',1));
 }########## END sub LU_CDR ######################################
@@ -1026,7 +1025,7 @@ sub AUTH_CALLBACK_SIG{
 $R->EXPIRE('OFFLINE:'.$Q{IMSI},0);
 my @result;
 logger('LOG',"SIG-$Q{USSD_CODE}-REQUEST","$Q{IMSI},$Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT}") if $CONF{debug}>1;
-if(($Q{SUB_BALANCE}>$CONF{balance_threshold})||($Q{USSD_CODE}=~/^(123|100|000|110|111)$/)){#if subscriber active
+if(($Q{SUB_BALANCE}>$CONF{balance_threshold})||($Q{USSD_CODE}=~/^(123|100|000|110|111|129)$/)){#if subscriber active
 	if (($Q{USSD_CODE}=~/112/)&&$Q{USSD_DEST}){@result=SPOOL()}
 	else{@result=USSD()}
 	return @result;
