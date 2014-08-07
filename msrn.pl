@@ -3,7 +3,7 @@
 ##
 ### Copyright (C) 2012-14, MSRN.ME 3.0 den@msrn.me
 ##
-my $rev='MSRN.ME-070714-rev.91.1 HFX-932';
+my $rev='MSRN.ME-070814-rev.95.3 HFX+569(IOT) HTF+745(RATE-TTL) HFX+1008(FEEDBACK) HFX+173(LU-MTC) HXF+633(PAY_AMOUNT)';
 #
 ## BUG: GUI double enter for non-gui agent
 ## BUG: GUI sub active even negative balance
@@ -170,7 +170,7 @@ switch ($Q{REQUEST_OPTION}){
 		$Q{REQUEST_LINE}=~tr/\&/\;/;
 		my %Q_tmp=split /[;=]/,$Q{REQUEST_LINE}; 
 		map {$Q{uc $_}=uri_unescape($Q_tmp{$_})} keys %Q_tmp;
-		$Q{MTC} = ($Q{MCC} ? $R->HGET('MTC',$Q{MCC}.int $Q{MNC}) : 0) if (defined $Q{CODE} and $Q{CODE} ne 'cdr') || ($Q{REQUEST_TYPE}=~/AUTH_CALLBACK_SIG/i);
+		$Q{MTC} = ($Q{MCC} ? $R->HGET('MTC',$Q{MCC}.int $Q{MNC}) : 0) if (defined $Q{CODE} and $Q{CODE} ne 'cdr') || ($Q{REQUEST_TYPE}=~/AUTH_CALLBACK_SIG|LU_CDR/i);
 		$Q{REQUEST_TYPE}='PAY' if $Q{OPERATION_XML};
 		$Q{REQUEST_TYPE}='PAYPAL' if $Q{BUSINESS}&&$Q{PAYMENT_STATUS} eq 'Completed';
 		$Q{TRANSACTIONID}=$Q{CDR_ID} if $Q{REQUEST_TYPE}=~/msisdn_allocation/i;
@@ -198,7 +198,7 @@ switch ($Q{REQUEST_OPTION}){
 		map {$Q{uc $_}=$Q{REQUEST}->{MSRN_Response}{$_}{value} if $_!~/^_?(i|z|pos|imsi|value)$/i} keys $Q{REQUEST}->{MSRN_Response};
 		$Q{ERROR}=$Q{REQUEST}->{Error_Message} ? $Q{REQUEST}->{Error_Message}{value} : 0;
 		$Q{MSRN}=~s/\+//;
-		logger('LOG',"XML-PARSED-$Q{REQUEST_OPTION}","$Q{MSRN} $Q{MCC} $Q{MNC} $Q{TADIG} $Q{MTC} $Q{ERROR}") if $CONF{debug}>3;
+		logger('LOG',"XML-PARSED-$Q{REQUEST_OPTION}","$Q{MSRN} $Q{MCC} $Q{MNC} $Q{TADIG} $Q{IOT} $Q{IOT_CHARGE} $Q{ERROR}") if $CONF{debug}>3;
 		$Q{PARSE_RESULT}=$Q{MSRN};
 	}#msrn
 # [PAY] ******************************************************************************
@@ -566,6 +566,7 @@ return $R->GET('MSRN_CACHE:'.$Q{IMSI}) if $R->EXISTS('MSRN_CACHE:'.$Q{IMSI});
 		$R->SETNX("STAT:AGENT:$Q{REMOTE_ADDR}:".substr($Q{TIMESTAMP},0,13).":$Q{MSRN_TYPE}","$CONF{api_threshold}");
 		$R->DECR("STAT:AGENT:$Q{REMOTE_ADDR}:".substr($Q{TIMESTAMP},0,13).":$Q{MSRN_TYPE}")>0 ? undef : return ('ERROR',-1,response('api_response','ERROR',"API $Q{MSRN_TYPE} THRESHOLD REACHED"));	
 	(my $status,my $code, $Q{MSRN})=CURL('get_msrn',TEMPLATE('api:'.$Q{MSRN_TYPE}),$CONF{api2});
+	($Q{IOT}==1 and $Q{MCC}>0) ? $R->HSET('MTC',"$Q{MCC}".int $Q{MNC}, (sprintf '%.2f',"$Q{IOT_CHARGE}")*100) : undef;
 	$Q{MTC} = $Q{MCC}>0 ? $R->HGET('MTC',$Q{MCC}.int $Q{MNC}) : $Q{SUB_MNO}>0 ? $R->HGET('MTC',$Q{SUB_MNO}) : 0;
 	$Q{MSRN}=~/\d{7,15}/ ? $R->SETEX('MSRN_CACHE:'.$Q{IMSI},10,$Q{MSRN}) : $R->SETEX('MSRN_CACHE:'.$Q{IMSI},300,'OFFLINE');
 	CALL_RATE($Q{MSRN},'MSRN') if $Q{MSRN} ne 'OFFLINE';
@@ -629,7 +630,7 @@ return 1;
 #
 ########################### PAY #################################################
 sub PAY{
-$Q{PAY_SERVER}=$CONF{pay_server}; $Q{PAY_AMOUNT}=$CONF{pay_amount}; $Q{PAY_CURRENCY}=$CONF{pay_currency}; $Q{PAY_WAY}=$CONF{pay_way};
+$Q{PAY_SERVER}=$CONF{pay_server}; $Q{PAY_AMOUNT}= $CONF{'pay_amount_'.$Q{PAY_AMOUNT}}>0 ? $CONF{'pay_amount_'.$Q{PAY_AMOUNT}} : $CONF{pay_amount}; $Q{PAY_CURRENCY}=$CONF{pay_currency}; $Q{PAY_WAY}=$CONF{pay_way};
 # [OUTGOING]**********************************************************************
 if ($Q{PAYTAG}){
 scalar ($Q{SUB_CN}=$R->HGET('SUB:'.$Q{PAYTAG},'SUB_CN')) ? $Q{XML}=TEMPLATE('html:pay_ua') : return 0;
@@ -654,7 +655,7 @@ $Q{PAY_STATUS}=~/success/ ? $Q{PAY_RESULT}=BILL( 'PAY',$Q{PAY_ORDER_ID},
 #[RESULT]***********************************************************************
 map{$R->HMSET('PAY_DONE:'.$Q{PAY_ORDER_ID},"$_","$Q{$_}") if $_=~/^PAY_/} keys %Q;
 	($Q{EMAIL_FROM},$Q{EMAIL_TO},$Q{EMAIL_SUBJ})=split(',',TEMPLATE('email:pay')); EMAIL();
-return('OK',0,response('api_response','XML',"PAYMENT $Q{PAY_ORDER_ID} IS PROCESSED"));
+return('OK',0,response('api_response','XML',"PAYMENT $Q{PAY_ORDER_ID} PROCESSED"));
 }#end PAY
 #
 ########################### PAYPAL section #######################################
@@ -741,7 +742,7 @@ my %HASH = scalar keys %{$Q{CACHE}={$R->HGETALL('RATE_CACHE:'.substr($Q{MSISDN},
 if (!scalar keys %{$Q{CACHE}}){
 	$R->HSET('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}),$_,$HASH{$_}, sub{}) for keys %HASH;
 	$R->wait_one_response;
-	$R->EXPIRE('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}),86400);
+	$R->EXPIRE('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}),$CONF{'rate_cache_ttl'});
 	}#if cache
 	$R->HSET('RATE_CACHE:'.$Q{MCC}.$Q{MNC},'RATE',$HASH{RATE}) if $_[1];
 #************************************************************************
@@ -750,7 +751,7 @@ map {$Q{$_}=$HASH{$_}} keys %HASH;#map for DID call
 	$Q{'CALL_LIMIT'}=($Q{'CALL_LIMIT'}=floor(($Q{'SUB_BALANCE'}/$Q{'CALL_RATE'})*60))>$CONF{'max-call-time'} ? $CONF{'max-call-time'} : $Q{'CALL_LIMIT'};
 #************************************************************************
 return \%HASH;# return for SPOOL
-}## sub call_rate
+}## sub CALL_RATE
 #
 ########## RESPONSE #############################################
 sub response{
@@ -839,6 +840,7 @@ sub API{
 if (AUTH()>0){logger('LOG','API',"AUTH OK")}#if auth
 elsif($R->EXISTS('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR})&&$Q{CODE}=~/ajax|js/){logger('LOG','APIAJAX',"AUTH OK")}
 else{
+	return ('OK',0,response('api_response','HTML',FEEDBACK())) if $Q{CODE}=~/feedback/&&$Q{MESSAGE}&&$Q{EMAIL}&&$Q{SUBJECT};
 	logger('LOG','API',"AUTH ERROR");
 	my %HASH=(aaData=>'');
 	return ('OK',0,response('api_response','JSON',\%HASH)) if $Q{CODE}=~/ajax/;
@@ -872,7 +874,7 @@ switch ($Q{CODE}){
 		logger('LOG','API-CMD-DID-[did/src]',"$Q{RDNIS}/$Q{SRC}") if $CONF{debug}>2;
 				$Q{RDNIS}=~s/\+//;
 				$Q{IMSI} = length($Q{RDNIS})==6 ? $Q{RDNIS} : $R->HGET('DID',$Q{RDNIS});
-				($Q{IMSI},$Q{MSRN},$Q{RDNIS_ALLOW})=$Q{IMSI}=~/(\d+)\:?(\d+)?\:?(.*)?/;
+#				($Q{IMSI},$Q{MSRN},$Q{RDNIS_ALLOW})=$Q{IMSI}=~/(\d+)\:?(\d+)?\:?(.*)?/;
 				$Q{GIMSI}= $CONF{'imsi_prefix'}.$Q{IMSI};
 					GET_SUB();#if no DID no SUB_STATUS
 						$Q{MSRN}=GET_MSRN() if $Q{SUB_BALANCE}>0 and not defined $Q{MSRN};
@@ -910,7 +912,6 @@ switch ($Q{CODE}){
 		}#case stat
 # [AJAX] **********************************************************************************************************
 	case 'ajax' {#AJAX
-#		return ('OK',0,response('api_response','HTML',$R->HGET('CARD','0921945786')));
 		$Q{TOKEN}=$R->GET('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR});
 		$R->HEXISTS('TEMPLATE','ajax:'.$Q{SUB_CODE}) ? my %HASH=(aaData=>SQL(TEMPLATE('ajax:'.$Q{SUB_CODE}),'ajax')) : return GUI($R->DEL('SESSION:'.$Q{SESSION}.':'.$Q{REMOTE_ADDR}),$Q{SESSION}=0);
 		logger('LOG','API-AJAX',$Q{SUB_CODE}) if $CONF{debug}>2;
@@ -1003,6 +1004,15 @@ return ('OK',-1,"Content-Type: text/html\n\n".TEMPLATE('html:login'),$R->EXPIRE(
 return ('OK',0,"Content-Type: text/html\n\n".TEMPLATE($Q{PAGE}));
 }#end GUI
 #
+########## FEEDBACK ############################################# 
+sub FEEDBACK{
+return 403 if $R->SETNX('FEEDBACK:'.$Q{REMOTE_ADDR},"$Q{EMAIL}")==0;
+	($Q{EMAIL_FROM},$Q{EMAIL_TO},$Q{EMAIL_SUBJ},$Q{EMAIL_BODY})=split(';',TEMPLATE('email:feedback'));
+	$Q{EMAIL_RESULT}=EMAIL();
+logger('LOG','API-FEEDBACK',"$Q{EMAIL} $Q{EMAIL_BODY}") if $CONF{debug}>2;
+	$R->EXPIRE('FEEDBACK:'.$Q{REMOTE_ADDR},"$CONF{feedback_timeout}");
+	return 200;
+}#end FEEDBACK
 ########## SIGNALING ############################################
 sub SIG{
 	my $sig=uc $Q{REQUEST_TYPE};
