@@ -21,6 +21,8 @@ curl -d '<?xml version="1.0"?><api><api_cmd><code>get_msrn</code><transactionid>
 curl -d '<?xml version="1.0"?><api><api_cmd><code>set_user</code><sub_code>DataEnable</sub_code><transactionid>1000</transactionid><timestamp>2012-06-13%2017%3A53%3A45</timestamp><imsi>234180000139868</imsi></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
 # SET USER ENABLE
 curl -d '<?xml version="1.0"?><api><api_cmd><code>set_user</code><sub_code>Enable</sub_code><transactionid>1000</transactionid><timestamp>2012-06-13%2017%3A53%3A45</timestamp><imsi>234180000139868</imsi></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
+#FEEDBACK
+curl -d 'message=test;subject=hello;email=den@msrn.me;request_type=api;code=feedback' http://127.0.0.1:8080
 # SEND SMS
 curl -d '<?xml version="1.0"?><api><api_cmd><code>send_sms</code><sms_to>447700027876</sms_to><sms_from>callme</sms_from><message>test message 12345</message><transactionid>1000</transactionid><imsi>234180000139868</imsi></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
 # SEND USSD
@@ -32,7 +34,7 @@ curl 'http://127.0.0.1?calldestination=%2A112%2A380502386116%2A82F010001F00CF%23
 ## INTERNAL
 curl 'http://127.0.0.1?calldestination=%2A112%2A379602%2A82F010001F00CF%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000139868;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700055360;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000139868;iccid=89234189720000000005'
 ##
-curl -d 'request_type=api_cmd;code=ajax;sub_code=rate;token=fa9fec615bf0b68aa631c68b0f85628d' http://127.0.0.1
+curl -d 'request_type=api_cmd;code=ajax;sub_code=mtc;token=fa9fec615bf0b68aa631c68b0f85628d' http://127.0.0.1
 #
 # URL 100
 curl -d 'calldestination=%2A100%23;imsi=234180000139993;transactionid=000000;request_type=auth_callback_sig' http://127.0.0.1
@@ -41,7 +43,7 @@ curl -d 'calldestination=%2A100%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=2341
 # URL 154
 curl 'http://127.0.0.1?calldestination=%2A154%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000379604;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=302;mnc=220;msisdn=%2B447700055360;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379605;iccid=89234189720000000005'
 #URL 000
-curl -d 'calldestination=*000#;carrierid=;ecc=0;globalimsi=234180000146873;globalmsisdn=447700033692;iccid=89234183800000009101;imsi=234180000146873;iot=0;iot_charge=0.0000;mcc=310;mnc=410;msisdn=+447700033692;request_type=auth_callback_sig;tadig=USACG;transactionid=197593' http://127.0.0.1
+curl -d 'calldestination=*000#;message=test;subject=hello;imsi=234180000139868;request_type=auth_callback_sig;' http://127.0.0.1
 # URL 111 VOUCHER
 curl -d 'calldestination=%2A111%2A229083280982976%2A1234%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000146832;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' http://127.0.0.1
 # URL 111
@@ -55,7 +57,7 @@ curl -k -d 'calldestination=%2A110%2A012027006225758%23;timestamp=2012-05-18%201
 # URL 125
 curl -k -d 'calldestination=%2A125%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000139868;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' https://127.0.0.1
 #URL 126
-curl 'http://127.0.0.1?calldestination=%2A126%2A380434014759%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000139868;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=05;msisdn=%2B447700055360;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379605;iccid=89234189720000000005'
+curl 'http://127.0.0.1?calldestination=%2A126%2A380434014759%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000139868;transactionid=164390;carrierid=;request_type=auth_callback_sig;mcc=255;mnc=03;msisdn=%2B447700055360;tadig=TEST;iot=0;iot_charge=0.0000;ecc=0;globalmsisdn=447700055360;globalimsi=234180000379605;iccid=89234189720000000005'
 # URL 111
 curl -k -d 'calldestination=%2A111%2A677504136938020%23;timestamp=2012-05-18%2017%3A07%3A46;imsi=234180000379608;transactionid=000000;carrierid=;request_type=auth_callback_sig;tadig=TEST' https://127.0.0.1
 #URL 129
