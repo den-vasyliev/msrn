@@ -3,10 +3,8 @@
 ##
 ### Copyright (C) 2012-14, MSRN.ME 3.0 den@msrn.me
 ##
-my $rev='MSRN.ME-070814-rev.95.3 HFX+569(IOT) HTF+745(RATE-TTL) HFX+1008(FEEDBACK) HFX+173(LU-MTC) HXF+633(PAY_AMOUNT)';
+my $rev='MSRN.ME-3.0 rev.101214.107.2 HFX-551(128) HFX-1144';
 #
-## BUG: GUI double enter for non-gui agent
-## BUG: GUI sub active even negative balance
 #################################################################
 use FCGI;
 use FCGI::ProcManager qw(pm_manage pm_pre_dispatch pm_post_dispatch);
@@ -39,13 +37,13 @@ use strict;
 no warnings 'once';
 print "All Modules Loaded Succesfully\n";
 # [CONFIG] *********************************************************
-my $R0 = Redis->new;
-$R0->SLAVEOF('NO','ONE');
-$R0->hset('CONF','rev',unpack('H*',$rev));
-my %CONF=$R0->HGETALL('CONF');
+our $R = Redis->new;
+$R->SLAVEOF('NO','ONE');
+$R->hset('CONF','rev',unpack('H*',$rev));
+my %CONF=$R->HGETALL('CONF');
 map {$CONF{$_}=pack('H*',$CONF{$_})} keys %CONF;
-my %SIG=$R0->HGETALL('SIG');
-$R0->quit;
+my %SIG=$R->HGETALL('SIG');
+$R->quit;
 # [FORK] ***********************************************************
 our $pid = fork;
 exit if $pid;
@@ -57,6 +55,9 @@ print $PIDFILE $$;
 $PIDFILE->close();
 #chdir "$CONF{rundir}" or die "CANT CHDIR: $CONF{rundir} $!";
 #POSIX::setuid(501) or die "Can't set uid: $!";
+DISPATCH(our %Q, our $t0);
+#
+sub DISPATCH{
 print "$CONF{rev} Ready at $$ debug level $CONF{debug} backlog $CONF{fcgi_backlog} processes $CONF{fcgi_processes}\n";
 # [CAPACITY] ************************************************************
 #50/20 - 10k 19.289372 seconds 518.42 [#/sec] 38.579 [s] / 1.929 [ms]
@@ -70,8 +71,7 @@ my $sock = FCGI::OpenSocket("0.0.0.0:$CONF{port}",$CONF{fcgi_backlog});
 		    		$dbh->do("PRAGMA synchronous = OFF");
 		    		$dbh->do("PRAGMA journal_mode = MEMORY");
 		    		$dbh->do("PRAGMA encoding = 'UTF-8'");
-	    		our $R = Redis->new(server => 'localhost:6379',encoding => undef,);
-	    		my $t0; my %Q;
+	    		$R = Redis->new(server => 'localhost:6379',encoding => undef,);
  		reopen_std();
 # [ACCEPT CONNECTIONS] ****************************************
 while ( $request->Accept() >= 0){
@@ -91,10 +91,10 @@ pm_pre_dispatch();
 			$Q{REMOTE_ADDR}=$env->{REMOTE_ADDR};
 			$Q{REQUEST_TYPE}='GUI' if $Q{REQUEST}!~m/request_type|api|datasession/ig;
 #**************************************************************************************
-				print eval{main()};
+				print eval{main()} if not $R->SISMEMBER('BLACKLIST',"$Q{REMOTE_ADDR}");
+				logger('DISPATCH-MAIN-ERROR: '.$@) if $@;
 				print response('ERROR','ERROR','GENERAL ERROR #'.__LINE__) if $@;
 					BILL($Q{REQUEST_TYPE}) if $Q{ACTION_CODE}>0;
-					logger('LOG',"MAIN-ACTION-RESULT-$Q{REQUEST_TYPE}","$Q{ACTION_STATUS} $Q{ACTION_CODE}");
 					logger('LOGEXPIRE');
 #**************************************************************************************
 			my $t2=Benchmark->new;
@@ -107,7 +107,8 @@ sub reopen_std {
     open(STDIN,  "+>/dev/null") or die "Can't open STDIN: $!";
     open(STDOUT, "+>&STDIN") or die "Can't open STDOUT: $!";
     open(STDERR, "+>&STDIN") or die "Can't open STDERR: $!";
-};#while Accept
+}#while Accept
+}########### END OF DISPATCH ####################################
 #
 ########## MAIN #################################################
 sub main{
@@ -124,9 +125,10 @@ $R->SLAVEOF('NO','ONE');
 eval{ ($Q{ACTION_STATUS},$Q{ACTION_CODE},$Q{ACTION_RESULT}) = 
 $Q{REQUEST_TYPE}=~/API/i ? API() : $R->HEXISTS("AGENT:$Q{SUB_HASH}",'host') ? AGENT() : $Q{REQUEST_TYPE}=~/(GUI|PAY)/ ? GUI() : SIG() }; 
 		warn $@ if $@;  logger('LOG',"MAIN-ACTION-ERROR",$@) if $@;
+	logger('LOG',"MAIN-ACTION-RESULT","$Q{REQUEST_TYPE}:$Q{ACTION_STATUS}:$Q{ACTION_CODE}");
 			return response('ERROR','ERROR','GENERAL ERROR #'.__LINE__) if $@;
 			return "$Q{ACTION_RESULT}" if $Q{ACTION_STATUS};
-}########## END sub main ########################################
+}########## END SUB MAIN ########################################
 #
 ########## XML_PARSE ############################################
 sub XML_PARSE{
@@ -155,7 +157,7 @@ switch ($Q{REQUEST_OPTION}){
 		}
 # [DATA] ************************************************************************
 		elsif(defined $Q{REQUEST}->{REFERENCE}{value} and $Q{REQUEST}->{REFERENCE}{value} eq 'Data'){
-		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}",'datasession') if $CONF{debug}>2;
+		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}",'DATASESSION') if $CONF{debug}>2;
 	map {$Q{uc $_}=$Q{REQUEST}->{$_} if $_!~/^_(i|z|pos)$/} keys $Q{REQUEST};
 	map {$Q{uc $_}=$Q{REQUEST}->{callleg}{$_}{value} if $_!~/^_(i|z|pos)$/} keys $Q{REQUEST}->{CALLLEG};
 		$Q{REQUEST_TYPE}='DATASESSION';
@@ -176,6 +178,7 @@ switch ($Q{REQUEST_OPTION}){
 		$Q{TRANSACTIONID}=$Q{CDR_ID} if $Q{REQUEST_TYPE}=~/msisdn_allocation/i;
 		($Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT})=
 		uri_unescape($Q{CALLDESTINATION})=~/^\*(\d{3})[\*|\#](\D{0,}\d{0,}).?(.{0,}).?/ if $Q{CALLDESTINATION};
+		$Q{USSD_EXT}=~s/\#//;
 		# [USSD DIRECT CALL] ************************************************************************
 			if (!$Q{USSD_CODE} && $Q{REQUEST_TYPE}=~/AUTH_CALLBACK_SIG/i){
 				uri_unescape($Q{CALLDESTINATION})=~/^\*(\+|00)?(\d{7,14})\#/;
@@ -287,30 +290,19 @@ switch ($Q{REQUEST_OPTION}){
 return $Q{PARSE_RESULT};
 }#END sub XML_PARSE
 #
-########## GET SUB #############################################
+########## GET_SUB #############################################
 sub GET_SUB{
-my %HASH;
+my (%HASH, %CARD_HASH);
 if ($Q{IMSI}&&$R->HLEN("SUB:$Q{IMSI}")>0){
 	%HASH=$R->HGETALL("SUB:$Q{IMSI}");
 	map {$Q{$_}=$HASH{$_}} keys %HASH;
-	$Q{SUB_BALANCE}=sprintf '%.2f',$Q{SUB_BALANCE};
-	}#if
-elsif($Q{IMSI}){
-#eval {
-#	%HASH = %{SQL(TEMPLATE('sql:sub'),'hash')};
-#	$R->HSET('SUB:'.$Q{IMSI},$_,$HASH{$_}, sub{}) for keys %HASH;
-#	$R->wait_all_responses;
-#	map {$Q{uc($_)}=$HASH{$_}} keys %HASH;
-#	$Q{SUB_BALANCE}=sprintf '%.2f',$Q{SUB_BALANCE};
-#	logger('LOG','OK','SUB WAS CACHED');
-#				};warn $@ if $@;  logger('LOG',"GET-SUB","ERROR $Q{IMSI} $@") if $@;
-
-return scalar %HASH;
-	}#if imsi
-else{
-return 0;
-}#else
-}########## END GET_SUB ########################################
+	%CARD_HASH=$R->HGETALL("CARD:".$Q{SUB_CN});
+	map {$Q{CARD_BALANCE_RESERVE}+=$CARD_HASH{$_} if $_=~/RESERVE/;$Q{$_}=sprintf '%.2f',$CARD_HASH{$_}} keys %CARD_HASH;
+		$Q{CARD_BALANCE_AVAIL} = sprintf '%.2f',($Q{CARD_BALANCE}-$Q{CARD_BALANCE_RESERVE});
+	return scalar %HASH;
+}#if
+else{ return 0 }#else
+}########## END SUB GET_SUB ########################################
 #
 ########## SQL ##################################################
 sub SQL{ 
@@ -347,14 +339,14 @@ else{#if no result code
 	logger('LOG','SQL-RETURNED','Error: '.$dbh->errstr) if $CONF{debug}>1;
 	return -1;
 }#else MYSQL ERROR
-}########## END sub SQL	#########################################
+}########## END SUB SQL	#########################################
 #
 ############## SUB SPOOL ############################################################
 sub SPOOL{
 # [INTERNAL CALL] *******************************************************************
 if (length($Q{USSD_DEST})==6 && $Q{IMSI}!~/^$Q{USSD_DEST}/){
 	$Q{IMSIB}=$Q{USSD_DEST}; #set cardnumber for B
-	$Q{SUB_B_BALANCE}=$R->HGET('SUB:'.$Q{USSD_DEST},'SUB_BALANCE'); #get balance for B
+	$Q{SUB_B_BALANCE}=$R->HGET("CARD:".$R->HGET('SUB:'.$Q{USSD_DEST},'SUB_CN'),"CARD_BALANCE"); #get balance for B
 return ('OFFLINE',-2,response('MOC_RESPONSE','XML',TEMPLATE('spool:offline'))) if $Q{SUB_B_BALANCE} < $CONF{balance_threshold};
 # [RESET IMSI] *********************************************************************
 	$Q{GIMSI}=$CONF{imsi_prefix}.$Q{IMSIB}; #set temp GIMSI for BILL insert
@@ -378,7 +370,8 @@ CALL_RATE($Q{USSD_DEST},'MSRN'); #get MTC for B
 }#if INTERNAL
 # [PROCESSING CALL] ****************************************************************
 if ($Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{7,15})$/){#if correct destination number - process imsi msrn
-	$Q{MSRN}=$2 if $Q{USSD_CODE}==128; #local number call
+	$Q{MSRN}=$Q{USSD_EXT} if $Q{USSD_CODE}==128; #local number call
+	$Q{MTC}=0 if $Q{USSD_CODE}==128; #local number call reset MTC
 # [GET MSRN] ************************************************************************
 	$Q{MSRN}=GET_MSRN() if not defined $Q{MSRN};
 # [IF MSRN] *************************************************************************
@@ -393,10 +386,11 @@ if ($Q{MSRN}=~/\d{7,15}/){
 		$Q{'USSD_DEST_RATE'}=ceil($Q{'USSD_DEST_RATE'}*$CONF{'markup_rate'});
 # [ CALL RATE ] *********************************************************************
 		$Q{'CALL_RATE'}=($Q{'USSD_DEST_RATE'}+$Q{'MSRN_RATE'}+$Q{'MTC'})/100; #show user in $
-# [ (SUB_BALANCE,$ / CALL_RATE,$) * 60 = CALL LIMIT,sec if limit > max_call_time -> max_call_time ] ***
-		$Q{'CALL_LIMIT'}=($Q{'CALL_LIMIT'}=floor(($Q{'SUB_BALANCE'}/$Q{'CALL_RATE'})*60))>$CONF{'max-call-time'} ? $CONF{'max-call-time'} : $Q{'CALL_LIMIT'};
-		$Q{'SUB_BALANCE'}=sprintf '%.2f',$Q{'SUB_BALANCE'}; #format $0.2
+# [ (CARD_BALANCE,$ / CALL_RATE,$) * 60 = CALL LIMIT,sec if limit > max_call_time -> max_call_time ] ***
+		$Q{'CALL_LIMIT'}=($Q{'CALL_LIMIT'}=floor( ($Q{'CARD_BALANCE_AVAIL'}/$Q{'CALL_RATE'})*60))>$CONF{'max-call-time'} ? $CONF{'max-call-time'} : $Q{'CALL_LIMIT'};
+		$Q{'CARD_BALANCE'}=sprintf '%.2f',$Q{'CARD_BALANCE'}; #format $0.2
 		$Q{'CALL_RATE'}=sprintf '%.2f',$Q{'CALL_RATE'}; #format $0.2
+		$R->HSET('CARD:'.$Q{SUB_CN},'CARD_BALANCE_RESERVE_'.$Q{IMSI}, abs($Q{'CALL_LIMIT'}*($Q{'CALL_RATE'}/60) ) );#резевр баланса на сумму лимит*рейт
 		$Q{CALLED}=$Q{MSRN} if not defined $Q{CALLED}; #set callerid
 		$Q{CALLING}=$Q{USSD_DEST} if not defined $Q{CALLING}; #set CDR dst
 #***********************************************************************************
@@ -417,7 +411,7 @@ logger('LOG','SPOOL-GET-TRUNK-[dest/msrn/prefix/rate/limit]',"$Q{USSD_DEST_TRUNK
 	else{ return ('OFFLINE',-2,response('MOC_RESPONSE','XML',TEMPLATE('spool:offline'))) }#else not msrn and dest 
 }#if dest
 else{ return ('NO DEST',-3,response('MOC_RESPONSE','XML',TEMPLATE('spool:nodest'))) }#else dest	
-}########## END SPOOL ##############################################################
+}########## END SUB SPOOL ##############################################################
 #
 ############# SUB USSD #########################
 sub USSD{
@@ -446,61 +440,116 @@ switch ($Q{USSD_CODE}){
 	case "122"{
 		logger('LOG','USSD-SMS-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST}") if $CONF{debug}==4;
 		my $SMS_result=SMS();#process sms
+		BILL('SMS',$SIG{'SMS'}) if $SMS_result>0;
 		logger('LOG','USSD-SMS-RESULT',"$SMS_result") if $CONF{debug}==4;
 		return ('OK',$SMS_result, response('MOC_RESPONSE','XML',TEMPLATE('ussd:'.$Q{USSD_CODE}.$SMS_result)));
 	}#case 122
 # [BALANCE] ************************************************************************
-	case [111,123]{
-	logger('LOG','USSD-BALANCE-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
-		$Q{AMOUNT} = $Q{SUB_BALANCE}>$Q{USSD_DEST} ? $Q{USSD_DEST}/$CONF{euro_currency} : 0;#CONVERT TO EURO
-	CURL('voip_user_balance',TEMPLATE('voip:user_balance'),$CONF{api3}) if $Q{USSD_DEST}=~/^\d{1,2}$/;
-		$Q{REQUEST_TYPE} = 'PAY' if $R->HEXISTS('VOUCHER_CACHE',"$Q{USSD_DEST}");#CHECK IF VOUCHER EXISTS
-	$Q{SUB_BALANCE_INET} = sprintf '%.2f',( CURL('voip_user_info',TEMPLATE('voip:user_info'),$CONF{api3})*$CONF{euro_currency} );
-	$Q{COST} = $Q{REQUEST_TYPE} eq 'PAY' ? $R->HGET('VOUCHER_CACHE',"$Q{USSD_DEST}") : $Q{AMOUNT}*$CONF{euro_currency} ? $Q{AMOUNT}*$CONF{euro_currency} :undef ;
-	$Q{SUB_BALANCE} = $Q{USSD_DEST}=~/^\d{1,2}$/ ? sprintf '%.2f',($Q{SUB_BALANCE}-$Q{COST}) : sprintf '%.2f',($Q{SUB_BALANCE}+$Q{COST});
-		$Q{PARSE_RESULT} =~/SUCCESS/i ? $Q{COST} = undef : undef;
-		$R->HDEL('VOUCHER_CACHE',"$Q{USSD_DEST}") if $Q{REQUEST_TYPE} eq 'PAY';
+	case [111,123,124]{
+	logger('LOG','USSD-BALANCE-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}>0;
+if ($Q{USSD_DEST}>0) {#если трансфер
+	if ( $Q{CARD_BALANCE}>($Q{COST}=$Q{USSD_DEST}) ) {#если баланс больше суммы трансфера
+				if ($Q{USSD_EXT}>0) { #если указан саб назначения
+					if (($Q{SUB_CN}=$R->HGET('SUB:'.$Q{USSD_EXT},'SUB_CN'))>0) {#если саб назначения существует
+						if ($Q{USSD_CODE} eq "124") {#если код 124 тарифицируем свою карту и его инет
+							$Q{GIMSI}=$CONF{imsi_prefix}.$Q{USSD_EXT};
+								BILL('TRF',$Q{COST});#плюс кост ему инет
+							$Q{SUB_CN}=$R->HGET('SUB:'.$Q{IMSI},'SUB_CN');
+							$Q{GIMSI}=$CONF{imsi_prefix}.$Q{IMSI};
+								BILL('BALANCE',$Q{COST});#минус кост себе карта
+							#обнуляем кост для обычной тарификации
+								return (  'OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111_voucher_trf") ),undef $Q{COST}  );
+						}else{#тарифицируем его и свою карту
+							$Q{GIMSI}=$CONF{imsi_prefix}.$Q{USSD_EXT};
+								BILL('PAY',$Q{COST});#пополняем его карту на кост
+							$Q{SUB_CN}=$R->HGET('SUB:'.$Q{IMSI},'SUB_CN');
+							$Q{GIMSI}=$CONF{imsi_prefix}.$Q{IMSI};
+								BILL('BALANCE',$Q{COST});#минус кост себе
+							#обнуляем кост для обычной тарификации
+								return (  'OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111_voucher_trf") ),undef);
+						}#тарифицируем его и свою карту
+					}else{#если саб назначения не существует
+					$Q{SUB_CN}=$R->HGET('SUB:'.$Q{IMSI},'SUB_CN');
+					return (  'OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111_not_found") )  );
+					}#возвращаем себя и отвечаем ошибкой
+				}else{#если не указан саб назначения минус карта плюс инет
+								BILL('BALANCE',$Q{COST});#минус кост себе карта
+								BILL('TRF',$Q{COST});#плюс кост себе инет
+				}#трансфер себе
+	}elsif( $Q{COST}=$R->HGET('VOUCHER_CACHE',"$Q{USSD_DEST}") ) {#если баланс меньше суммы перевода проверяем ваучер
+					if ($Q{USSD_EXT}>0) {#если определен саб назначения ваучера
+						if ( ($Q{SUB_CN}=$R->HGET('SUB:'.$Q{USSD_EXT},'SUB_CN'))>0 ) { #если саб назначения существует
+							if ($Q{USSD_CODE} eq "124") {#bill+Binet пополняем его инет
+							$Q{GIMSI}=$CONF{imsi_prefix}.$Q{USSD_EXT};
+								BILL('TRF',$Q{COST});#плюс кост ему инет
+								$R->HDEL('VOUCHER_CACHE',"$Q{USSD_DEST}") ;#удаляем ваучер
+								#обнуляем кост для обычной тарификации (получателя!)
+									return (  'OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111_voucher_trf") ),undef );
+							}else{#bill+B пополняем его карту
+									$Q{GIMSI}=$CONF{imsi_prefix}.$Q{USSD_EXT};
+								BILL('PAY',$Q{COST});#пополняем его карту на кост
+									$R->HDEL('VOUCHER_CACHE',"$Q{USSD_DEST}");#удаляем ваучер
+								#обнуляем кост для обычной тарификации (получателя!)
+									return (  'OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111_voucher_trf") ), undef );
+								}#пополняем его карту
+						}else{#если саб назначения не существует отвечаем ошибкой
+								$Q{SUB_CN}=$R->HGET('SUB:'.$Q{IMSI},'SUB_CN');#вернем себя для тарификации
+									return (  'OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111_not_found") )  );
+							}#отказ с уведомлением
+					}elsif($Q{USSD_CODE} eq "124") {#bill+Ainet пополняем только свой инет
+						$Q{SUB_CN}=$R->HGET('SUB:'.$Q{IMSI},'SUB_CN');#вернем себя для тарификации
+							BILL('TRF',$Q{COST});#пополняем инет на кост
+								$R->HDEL('VOUCHER_CACHE',"$Q{USSD_DEST}") ;#удаляем ваучер
+					}else{#bill+A пополняем только себя
+						$Q{SUB_CN}=$R->HGET('SUB:'.$Q{IMSI},'SUB_CN');#вернем себя для тарификации
+							BILL('PAY',$Q{COST});#пополняем карту на кост
+								$R->HDEL('VOUCHER_CACHE',"$Q{USSD_DEST}") ;#удаляем ваучер
+					}#пополняем только себя
+	}else{ 	
+				return (  'OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111_no_balance") )  ) if $Q{USSD_DEST}=~/^\d{1,2}$/;
+				return (  'OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:voucher_error") )  );
+				}#если ваучера нет возвращаем ошибку
+}else{ 	
+			return (  'OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111") )  ) 
+	}#если не трансфер возвращаем текущий баланс
+#
 		return ('OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:111")));
 	}#case 111
 # [VOIP] ************************************************************************
-	case "125"{
+	case "x125"{
 	$Q{SUB_PIN} ? return ('OK',1,response('MOC_RESPONSE','DEFAULT','LOGIN:sim'.$Q{SUB_CN}.'*'.$CONF{voip_domain}.' PIN:'.$Q{SUB_PIN}.TEMPLATE('voip:user_help'))) : return ('WARNING',1,response('MOC_RESPONSE','DEFAULT','NEED TO SET NEW PIN. CALL *000*5#'));
-#	my ($status,$code,$new_user)=CURL('voip_user_new',TEMPLATE('voip_user_pin'),$CONF{api3});
-#	my ($status,$code,$new_user)=CURL('voip_user_new',TEMPLATE('voip_user_status'),$CONF{api3});
 	}#case 125
 # [CALL RATE] ************************************************************************
-	case "126"{
+	case "x126"{
 	$Q{INCOMING_RATE}=sprintf '%.2f',${CALL_RATE($Q{USSD_DEST})}{RATE}/100;
 	$Q{OUTGOING_RATE}=sprintf '%.2f',$Q{INCOMING_RATE}+$R->HGET('RATE_CACHE:'.$Q{MCC}.$Q{MNC},'RATE')/100*$CONF{'markup_rate'};
 	$Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{1,15})$/ ? return ('OK',1,response('MOC_RESPONSE','DEFAULT',TEMPLATE('ussd:126:rate'))) : return ('NO DEST',1,response('MOC_RESPONSE','DEFAULT',TEMPLATE('ussd:126:nodest')));
 	}#case 126
 # [CALLERID] ************************************************************************
-	case "127x"{
-		logger('LOG','USSD-CFU-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST}") if $CONF{debug}==4;
-		if ($Q{USSD_DEST}=~/^(\+|00)?(\d{5,15})$/){#if prefix +|00 and number length 5-15 digits
-			logger('LOG','SIG-USSD-CFU-REQUEST',"Subcode processing $Q{USSD_DEST}") if $CONF{debug}==4;
-				 my $CFU_number=$2;
-				 my $SQL=qq[SELECT get_cfu_code($Q{IMSI},"$CFU_number")];
-					my $CODE=${SQL("$SQL",'array')}[0];
-(my $status,my $code,$CODE)=CURL('sms_mo',${SQL(qq[SELECT get_uri2('sms_mo',NULL,"+$CFU_number","$Q{MSISDN}",'ruimtools',"$CODE")],'array')}[0]) if $CODE=~/\d{5}/;
-					$CFU_number='NULL' if $CODE!~/0|1|INUSE/;
-					$SQL=qq[SELECT get_cfu_text("$Q{IMSI}","$CODE",$CFU_number)];
-					my $TEXT_result=${SQL("$SQL",'array')}[0];
-					return ('OK',$CODE,&response('auth_callback_sig','XML',$Q{TRANSACTIONID},$TEXT_result));
+	case "127"{
+		logger('LOG','USSD-CID-REQUEST',"$Q{USSD_CODE} $Q{USSD_DEST}") if $CONF{debug}>0;
+		if ($Q{USSD_DEST}=~/^(\+|00)?($CONF{country_code}\d{6,15})$/){#if prefix +|00 country code and number length 7-15 digits
+			logger('LOG','SIG-USSD-CID-REQUEST',"$Q{USSD_DEST}") if $CONF{debug}>0;
+				 $Q{SMS_TO}=$2; $Q{MESSAGE}=int(rand(10000))+10000;#sms_to and code
+					 $R->HSET('CID:'.$Q{IMSI}, $Q{MESSAGE}, $Q{USSD_DEST});#code
+					 $R->EXPIRE('CID:'.$Q{IMSI}, $CONF{html_session_expire}/4 );#15 min for code
+						 logger('LOG','USSD-CID-CURL',TEMPLATE('api:send_sms_mo'));
+#						 CURL('send_sms_mo',TEMPLATE('api:send_sms_mo'),$CONF{api2});#send code
+#						 BILL('SMS');#bill sms
+					return ('OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:$Q{USSD_CODE}") ) );
 			}#if number length
-			else{#else check activation
-			logger('LOG','SIG-USSD-CFU-REQUEST',"Code processing $Q{USSD_CODE} $Q{USSD_DEST}") if $CONF{debug}==4;
-				my $SQL=qq[SELECT get_cfu_text("$Q{IMSI}",'active',NULL)];
-				#my @SQL_result=&SQL($SQL);
-				my $TEXT_result=${SQL("$SQL",'array')}[0]; 
-				return ('OK', $Q{USSD_CODE},&response('auth_callback_sig','XML',$Q{TRANSACTIONID},"$TEXT_result"));
-				}
+			else{#else check code
+			logger('LOG','SIG-USSD-CID-REQUEST',$Q{USSD_DEST}) if $CONF{debug}>0;			
+			 $Q{SUB_NEW_DID}=$R->HGET('CID:'.$Q{IMSI}, "$Q{USSD_DEST}");
+			 $R->HSET('SUB:'.$Q{IMSI},'SUB_DID', $Q{SUB_NEW_DID} ? $Q{SUB_NEW_DID} : $Q{SUB_DID});
+			return ('OK',1,response( 'MOC_RESPONSE','XML',TEMPLATE("ussd:".$Q{USSD_CODE}. ($Q{SUB_NEW_DID} ? ':1' : ':0') ) ) );
+			}#else code
 	}#case 127
 # [LOCAL CALL] ************************************************************************
 	case "128"{
 		logger('LOG','LOCAL-CALL-REQUEST',"$Q{USSD_CODE}") if $CONF{debug}==4;
-		$Q{SPOOL_RESULT}=SPOOL() if $Q{USSD_EXT};
-		$Q{USSD_EXT} ? return ('OK',scalar @{$Q{SPOOL_RESULT}},@{$Q{SPOOL_RESULT}}) : return ('OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:128")));
+	#	$Q{SPOOL_RESULT}=SPOOL() if $Q{USSD_EXT};
+		$Q{USSD_EXT}=~/^(\+|00)?([1-9]\d{7,15})$/ ? return (SPOOL()) : return ('OK',1,response('MOC_RESPONSE','XML',TEMPLATE("ussd:128")));
 	}#case 128
 # [GUI PIN] ***************************************************************************
 	case "129"{
@@ -514,7 +563,7 @@ switch ($Q{USSD_CODE}){
 	return ('OK',1,response('MOC_RESPONSE','XML',TEMPLATE('ussd:default')));		
 	}#end else switch ussd code (no code defined)
 }#end switch ussd code
-}## END sub USSD ###################################
+}## END SUB USSD ###################################
 #
 ########### CURL #############################################
 sub CURL{
@@ -572,7 +621,7 @@ return $R->GET('MSRN_CACHE:'.$Q{IMSI}) if $R->EXISTS('MSRN_CACHE:'.$Q{IMSI});
 	CALL_RATE($Q{MSRN},'MSRN') if $Q{MSRN} ne 'OFFLINE';
 	BILL('MSRN');
 	return $Q{MSRN};
-}## END sub GET_MSRN ####
+}## END SUB GET_MSRN ####
 #
 ##### AGENT ################################################
 sub AGENT{
@@ -602,7 +651,7 @@ my ($status, $code, $result)=CURL('AGENT',$Q{AGENT_URI},$Q{SUB_HASH});
 #************************************************************************
 	defined $Q{ERROR} ? $response_options='ERROR' : undef;
 return ($status, 1, response($response_type,$response_options,$result));
-}# END sub AGENT
+}# END SUB AGENT
 ##################################################################
 #
 ### SUB AUTH ########################################################
@@ -626,7 +675,7 @@ return $R->SISMEMBER('ACCESS_LIST',"$Q{DIGEST}") if $Q{REQUEST_TYPE}=~/API/i;
 $R->SETEX('SESSION:'.$Q{DIGEST}.':'.$Q{REMOTE_ADDR},$CONF{html_session_expire},$Q{TOKEN}) ? $Q{SESSION}=$Q{DIGEST} : return -1;
 # [REDIRECT] ************************************************************************
 return 1;
-}#END sub auth ##################################################################
+}#END SUB AUTH ##################################################################
 #
 ########################### PAY #################################################
 sub PAY{
@@ -647,8 +696,8 @@ scalar ( $Q{PAY_SESSION}=$R->GET('PAY_CACHE:'.$Q{PAY_ORDER_ID}) ) ? undef :
 AUTH('PAY:'.$Q{REMOTE_ADDR})&&($Q{PAY_STATUS}=~/success/) ? undef : 
 	return ( 'PAYMENT CONFIRMATION',0,response('api_response','HTML',TEMPLATE('html:pay_'.$Q{PAY_STATUS})) );
 #[PROCESSING]********************************************************************
-$Q{PAY_STATUS}=~/success/ ? $Q{PAY_RESULT}=BILL( 'PAY',$Q{PAY_ORDER_ID},
-							$Q{COST}=$Q{PAY_AMOUNT}*$CONF{pay_exchange},
+$Q{PAY_STATUS}=~/success/ ? $Q{PAY_RESULT}=BILL( 'PAY',$Q{PAY_AMOUNT}*$CONF{pay_exchange},
+							$Q{PAY_ORDER_ID},
 							$Q{GIMSI}=$CONF{imsi_prefix}.$Q{PAY_GOODS_ID},
 							$Q{IMSI}=$Q{PAY_GOODS_ID},
 							$R->DEL('PAY_CACHE:'.$Q{PAY_ORDER_ID}) ) : undef;
@@ -656,7 +705,7 @@ $Q{PAY_STATUS}=~/success/ ? $Q{PAY_RESULT}=BILL( 'PAY',$Q{PAY_ORDER_ID},
 map{$R->HMSET('PAY_DONE:'.$Q{PAY_ORDER_ID},"$_","$Q{$_}") if $_=~/^PAY_/} keys %Q;
 	($Q{EMAIL_FROM},$Q{EMAIL_TO},$Q{EMAIL_SUBJ})=split(',',TEMPLATE('email:pay')); EMAIL();
 return('OK',0,response('api_response','XML',"PAYMENT $Q{PAY_ORDER_ID} PROCESSED"));
-}#end PAY
+}#END SUB PAY
 #
 ########################### PAYPAL section #######################################
 sub PAYPAL{
@@ -671,7 +720,7 @@ sub PAYPAL{
 	logger('LOG','PAYPAL-RESULT',"$Q{VOUCHER_CODE} $Q{MC_GROSS} $Q{EMAIL_RESULT}") if $CONF{debug}>0;
 return ('PayPal', 0, response('PayPal','HTML',"$Q{EMAIL_RESULT}"));
 }#PAYPAL
-## END sub PAYPAL ##################################################################		
+## END SUB PAYPAL ##################################################################		
 #
 ### SUB EMAIL #########################################################
 sub EMAIL{
@@ -710,7 +759,7 @@ map { $HASH{api}{api_request}{$_}={ value=>$Q{$_} } if defined $Q{$_}}  @{ $R->S
 $HASH{api}{api_auth}{auth_key}={ value=>$R->HGET('AGENT:'.$Q{SUB_HASH},'auth') };
 #************************************************************************
 return XML::Bare->xml(\%HASH);#to agent
-}#XML
+}#END SUB XML
 #
 ### SUB TEMPLATE #########################################################
 ##
@@ -719,43 +768,48 @@ use vars qw($R);
 my $template = Text::Template->new(TYPE => 'STRING',SOURCE => pack( "H*",$R->HGET('TEMPLATE',$_[0]) )  );
 my $text = $template->fill_in(HASH=>\%Q);
 return $text;
-}#end TEMPLATE
+}#END SUB TEMPLATE
 ##
 ### SUB BILL #########################################################
 sub BILL{
-$Q{TYPE}=$_[0];
-$Q{INNER_TID} = $_[1] if defined $_[1];
+$Q{TYPE}=uc $_[0];
+return 0 if $Q{TYPE} eq 'NULL';
+$Q{INNER_TID} = $_[2] if defined $_[2];
+$Q{SUB_CN} = defined $Q{SUB_CN} ? $Q{SUB_CN} : $R->HGET('SUB:'.$Q{IMSI},'SUB_CN');
 $Q{USSD} = defined $Q{USSD_CODE} ? $Q{USSD_CODE} : 0;
-$Q{COST}= defined $Q{COST} ? abs($Q{COST}) : $SIG{$_[0]} ? abs($SIG{$_[0]}) : 0;
-logger('LOG','BILLING-[TYPE,USSD_CODE:COST:SIG]',"$Q{TYPE}:$Q{USSD}:$Q{COST}:$SIG{$_[0]}") if $CONF{debug}>2;
-$Q{SUB_NEW_BALANCE}=$R->HINCRBYFLOAT('SUB:'.$Q{IMSI},'SUB_BALANCE', $Q{REQUEST_TYPE} eq 'DATASESSION' ? 0 : $Q{REQUEST_TYPE} eq 'PAY' ? abs($Q{COST}) : abs($Q{COST})*-1);
-return SQL(TEMPLATE('sql:bill')) if defined $Q{GIMSI};
-}## end BILL
+$Q{USSD_NAME} = ($SIG{$Q{USSD}.':name'}) ? uc $SIG{$Q{USSD}.':name'} : $Q{TYPE};
+$Q{COST}= defined $_[1] ? abs($_[1]) : $SIG{$Q{USSD}} ? abs($SIG{$Q{USSD}}) : $SIG{$Q{TYPE}} ? abs($SIG{$Q{TYPE}}) : 0;
+$Q{BALANCE_TYPE} = $Q{TYPE}=~/DATASESSION|TRF/ ? 'INET_BALANCE' : 'CARD_BALANCE';
+logger('LOG','BILLING:[BALANCE|TYPE|NAME|USSD|COST]',"$Q{BALANCE_TYPE}:$Q{TYPE}:$Q{USSD_NAME}:$Q{USSD}:$Q{COST}") if $CONF{debug}>2;
+$Q{"$Q{BALANCE_TYPE}"}=$Q{SUB_NEW_BALANCE}=sprintf '%.2f',$R->HINCRBYFLOAT('CARD:'.$Q{SUB_CN},"$Q{BALANCE_TYPE}", ($Q{TYPE}=~/PAY|TRF/ ? abs($Q{COST}) : abs($Q{COST})*-1 ) );
+return (SQL(TEMPLATE('sql:bill')) ) if defined $Q{GIMSI};
+}## END SUB BILL
 #
 ### SUB CALL_RATE #####################################################
 sub CALL_RATE{	
 use vars qw($R);
 $Q{MSISDN}=$_[0];
 #my $cache;
-my %HASH = scalar keys %{$Q{CACHE}={$R->HGETALL('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}))}} ? %{$Q{CACHE}} : %{SQL(TEMPLATE('sql:get_rate'),'hash')};
+my %HASH = scalar keys %{$Q{CACHE}={$R->HGETALL('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}))}} ? %{$Q{CACHE}} : %{ SQL(TEMPLATE('sql:get_rate'),'hash') };
 #************************************************************************
 if (!scalar keys %{$Q{CACHE}}){
 	$R->HSET('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}),$_,$HASH{$_}, sub{}) for keys %HASH;
 	$R->wait_one_response;
-	$R->EXPIRE('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}),$CONF{'rate_cache_ttl'});
+	$R->EXPIRE('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}),defined $CONF{'rate_cache_ttl'} ? $CONF{'rate_cache_ttl'} :86400 );
 	}#if cache
 	$R->HSET('RATE_CACHE:'.$Q{MCC}.$Q{MNC},'RATE',$HASH{RATE}) if $_[1];
 #************************************************************************
 map {$Q{$_}=$HASH{$_}} keys %HASH;#map for DID call
-	$Q{'CALL_RATE'}=($HASH{'RATE'}*$CONF{'markup_rate'}+$Q{MTC})/100;
-	$Q{'CALL_LIMIT'}=($Q{'CALL_LIMIT'}=floor(($Q{'SUB_BALANCE'}/$Q{'CALL_RATE'})*60))>$CONF{'max-call-time'} ? $CONF{'max-call-time'} : $Q{'CALL_LIMIT'};
+	$Q{'CALL_RATE'}=($HASH{'RATE'}*$CONF{'markup_rate'}+$Q{MTC})/100;#notation 1.2
+	$Q{'CALL_LIMIT'}=($Q{'CALL_LIMIT'}=floor(($Q{'CARD_BALANCE_AVAIL'})/$Q{'CALL_RATE'})*60)>$CONF{'max-call-time'} ? $CONF{'max-call-time'} : $Q{'CALL_LIMIT'};#notation seconds
 #************************************************************************
+logger('LOG','CALL_RATE-[rate|limit|mtc]:',"$Q{'CALL_RATE'}:$Q{'CALL_LIMIT'}:$Q{MTC}") if $CONF{debug}>2;
 return \%HASH;# return for SPOOL
-}## sub CALL_RATE
+}## END SUB CALL_RATE
 #
 ########## RESPONSE #############################################
 sub response{
-use vars qw($t0 $R);
+#use vars qw($t0 $R);
 $Q{TRANSACTION_ID}=$Q{TRANSACTIONID};
 my ($ACTION_TYPE, $RESPONSE_TYPE, $RESPONSE, $SUB_RESPONSE)=@_;
 my $HEAD=qq[Content-Type: text/xml\n\n<?xml version="1.0" ?>];
@@ -792,7 +846,7 @@ switch ($RESPONSE_TYPE){
 }########## RESPONSE #############################################
 ########## LOGGER ##############################################
 sub logger{
-use vars qw($t0);
+#use vars qw($t0);
 my $t3=Benchmark->new;
 my $td1=timediff($t3, $t0);
 my $timer=substr($td1->[0],0,8);
@@ -816,7 +870,6 @@ logger('LOG','SMS-REQ',"$Q{USSD_DEST} $Q{USSD_EXT}") if $CONF{debug}==3;
 #
 ($Q{PAGE},$Q{PAGES},$Q{SEQ})=split(undef,$Q{USSD_DEST}); 
 ($Q{SMS_TO},$Q{MESSAGE})=split('\*',uri_unescape($Q{USSD_EXT}));
-$Q{MESSAGE}=~s/\#//;
 ($Q{SMS_PREFIX},$Q{SMS_TO})=$Q{SMS_TO}=~/^(\D|00)?([1-9]\d{5,12})/;
 $Q{SMS_TO}=$R->HGET('DID',$Q{SMS_TO}) if length($Q{SMS_TO})==6;
 return 3 if length($Q{SMS_TO})<6;
@@ -874,15 +927,14 @@ switch ($Q{CODE}){
 		logger('LOG','API-CMD-DID-[did/src]',"$Q{RDNIS}/$Q{SRC}") if $CONF{debug}>2;
 				$Q{RDNIS}=~s/\+//;
 				$Q{IMSI} = length($Q{RDNIS})==6 ? $Q{RDNIS} : $R->HGET('DID',$Q{RDNIS});
-#				($Q{IMSI},$Q{MSRN},$Q{RDNIS_ALLOW})=$Q{IMSI}=~/(\d+)\:?(\d+)?\:?(.*)?/;
 				$Q{GIMSI}= $CONF{'imsi_prefix'}.$Q{IMSI};
-					GET_SUB();#if no DID no SUB_STATUS
-						$Q{MSRN}=GET_MSRN() if $Q{SUB_BALANCE}>0 and not defined $Q{MSRN};
-				$Q{DID_RESULT}=$Q{MSRN}=~/\d{7,15}/;
-				CALL_RATE($Q{MSRN},'MSRN') if $Q{DID_RESULT};
-				$Q{RATE}=$Q{RATE}+$Q{MTC};
-				logger('LOG','API-DID-[msrn/rate]',"$Q{MSRN} $Q{RATE}") if $CONF{debug}>2;
-				return ('OK',0,response('get_did','HTML',TEMPLATE('api:did:'.$Q{DID_RESULT})));
+					GET_SUB();#if no DID no CARD_BALANCE
+						$Q{MSRN}=GET_MSRN() if ($Q{CARD_BALANCE_AVAIL}>$CONF{balance_threshold}) and not defined $Q{MSRN};
+				$Q{DID_RESULT}= $Q{MSRN}=~/\d{7,15}/ ?				
+				(CALL_RATE($Q{MSRN},'MSRN'),
+			$R->HSET('CARD:'.$Q{SUB_CN},'CARD_BALANCE_RESERVE_'.$Q{IMSI}, abs($Q{'CALL_LIMIT'}*(($Q{RATE}+$Q{MTC})/100/60) ) ),1 ) : 0;
+				logger('LOG','API-DID-[msrn|rate|mtc|limit]',"$Q{MSRN} $Q{RATE} $Q{MTC} $Q{'CALL_LIMIT'}") if $CONF{debug}>2;
+				return ('OK',0,response('get_did','HTML',TEMPLATE('api:did:'.$Q{DID_RESULT}) ) );
 	}#case get_did
 # [SEND USSD] **********************************************************************************************************
 	case 'send_ussd' {#SEND_USSD
@@ -945,10 +997,12 @@ $Q{COST} =sprintf '%.2f', ( (ceil( $Q{BILLSEC}/60)* ($Q{MTC}?$Q{MTC}:0) ) )/100;
 $Q{IMSI}=$Q{ACCOUNTCODE};
 $Q{GIMSI}=$CONF{imsi_prefix}.$Q{IMSI};
 $Q{USERFIELD}=$Q{IMSI};
-$Q{ACCOUNTCODE}=$R->HGET('SUB:'.$Q{IMSI},'SUB_CN');
-BILL('CALL') if $Q{COST}>0;
+$Q{SUB_CN}=$Q{ACCOUNTCODE}=$R->HGET('SUB:'.$Q{IMSI},'SUB_CN');
+BILL('CALL',$Q{COST}) if $Q{COST}>0;
 SQL(TEMPLATE('sql:cdr')) if $Q{COST}>0;
 $Q{COSTA}=$Q{COST};
+	$Q{USSD_TO}=$R->HGET('DID',"$Q{IMSI}"); $Q{MESSAGE}=(strftime( "\%H:\%M:\%S", gmtime($Q{BILLSEC}) ) )." \$$Q{COST}";
+	CURL('send_ussd',TEMPLATE('api:send_ussd'),$CONF{api2}) if $Q{COST}>0 && $R->HEXISTS('SUB:'.$Q{IMSI},'SUB_NOTIFY');
 #-- INTERNAL
 if ($Q{DCONTEXT} eq 'callme_reg' and $Q{LASTAPP} eq 'Dial' and $Q{DISPOSITION} eq 'ANSWERED' and ($Q{BILLSEC}>0 or $Q{MTC}>0) and $Q{DSTCHANNEL} ne '' and $Q{ACCOUNTCODEB} ne ''){
 $Q{COST} = sprintf '%.2f', ( (ceil ($Q{BILLSEC}/60)* ($Q{MTCB}?$Q{MTCB}:0) ) + ($Q{BILLSEC}*$Q{RATEB}/60?$Q{RATEB}:0) )/100;
@@ -956,11 +1010,14 @@ $Q{IMSI}=$Q{ACCOUNTCODEB};
 $Q{GIMSI}=$CONF{imsi_prefix}.$Q{IMSI};
 $Q{DCONTEXT}='did_reg';
 $Q{USERFIELD}=$Q{IMSI};
-$Q{ACCOUNTCODE}=$R->HGET('SUB:'.$Q{IMSI},'SUB_CN');
-BILL('CALL') if $Q{COST}>0;
+$Q{SUB_CN}=$Q{ACCOUNTCODE}=$R->HGET('SUB:'.$Q{IMSI},'SUB_CN');
+BILL('CALL',$Q{COST}) if $Q{COST}>0;
 SQL(TEMPLATE('sql:cdr_inner')) if $Q{COST}>0;
+	$Q{USSD_TO}=$R->HGET('DID',"$Q{IMSI}"); $Q{MESSAGE}=(strftime( "\%H:\%M:\%S", gmtime($Q{BILLSEC}) ) )." \$$Q{COST}";
+	CURL('send_ussd',TEMPLATE('api:send_ussd'),$CONF{api2}) if $Q{COST}>0 && $R->HEXISTS('SUB:'.$Q{IMSI},'SUB_NOTIFY');
 logger('LOG','CDR-INTERNAL',$Q{COST});
 }#INTERNAL
+	$R->HDEL("CARD:".$Q{SUB_CN},'CARD_BALANCE_RESERVE_'.$Q{IMSI});
 		return ('OK',0,response('api_response','HTML',"$Q{COST}:$Q{COSTA}" ) );
 		}#case sql
 # [JS] **********************************************************************************************************
@@ -1024,6 +1081,7 @@ sub LU_CDR{
 	SQL(TEMPLATE('sql:lu'));
 	$R->EXPIRE('OFFLINE:'.$Q{IMSI},0);	
 	$Q{CDR_STATUS}=1;
+	$Q{REQUEST_TYPE}='LU_CDR_FREE' if $R->HGET("STAT:SUB:$Q{GIMSI}",'['.substr($Q{TIMESTAMP},0,10)."]-[LU_CDR]") > 25;
 	return ('OK',"$Q{SUB_ID}:$Q{MCC}:$Q{MNC}:$Q{TADIG}",response('CDR_RESPONSE','XML',1));
 }########## END sub LU_CDR ######################################
 #
@@ -1033,18 +1091,14 @@ sub LU_CDR{
 #
 sub AUTH_CALLBACK_SIG{
 $R->EXPIRE('OFFLINE:'.$Q{IMSI},0);
-my @result;
 logger('LOG',"SIG-$Q{USSD_CODE}-REQUEST","$Q{IMSI},$Q{USSD_CODE},$Q{USSD_DEST},$Q{USSD_EXT}") if $CONF{debug}>1;
-if(($Q{SUB_BALANCE}>$CONF{balance_threshold})||($Q{USSD_CODE}=~/^(123|100|000|110|111|129)$/)){#if subscriber active
-	if (($Q{USSD_CODE}=~/112/)&&$Q{USSD_DEST}){@result=SPOOL()}
-	else{@result=USSD()}
-	return @result;
-		}#if subscriber active
-	else{#status not 1 or balance request
-		logger('LOG','auth_callback_sig-LOW-BALANCE',"$Q{SUB_BALANCE} #".__LINE__) if $CONF{debug}>1;
-#		$Q{EMAIL_STATUS}="$Q{SUB_BALANCE}";
-#		email();
-		return ('OK',1, response('MOC_RESPONSE','XML',"PLEASE REFIL YOUR BALANCE"));
+if(($Q{CARD_BALANCE_AVAIL}>$CONF{balance_threshold})||($Q{USSD_CODE}=~/^(123|100|000|110|111|129)$/)){#check balance
+	if (($Q{USSD_CODE}=~/112/)&&$Q{USSD_DEST}){return SPOOL()}#if call
+	else{ return USSD()} #if ussd
+			}#if balance
+	else{#no balance
+		logger('LOG','auth_callback_sig-LOW-BALANCE',"$Q{CARD_BALANCE} #".__LINE__) if $CONF{debug}>1;
+		return ('OK',1, response('MOC_RESPONSE','XML',TEMPLATE('ussd:no_balance') ) );
 	}#else status
 }## END sub auth_callback_sig
 #
@@ -1053,45 +1107,43 @@ sub OUTBOUNDAUTH{
 AUTH($Q{REMOTE_ADDR}) ? undef : return ('NO AUTH',-1,response('api_response','ERROR',"NO AUTH"));	
 	$Q{USSD_DEST}=$Q{DESTINATION};
 	$Q{USSDMESSAGETOHANDSET}=TEMPLATE('spool:wait');
-	SPOOL();
+($Q{CARD_BALANCE_AVAIL}>$CONF{balance_threshold}) ? SPOOL() : return ('OK',1, response('MOC_RESPONSE','XML', TEMPLATE('ussd:no_balance') ));
 	return ('OK',1, response('RESPONSE','XML',0,$Q{USSDMESSAGETOHANDSET}));
-}#END OutboundAUTH
+}#END OUTBOUNDAUTH
 ################################################################# 
 #
 ### SUB DataAUTH ###################################################################
 sub DATAAUTH{
 $Q{DATA_RATE} = $R->HGET('DATA',$Q{MCC}.int $Q{MNC});
 logger('LOG','DATA_RATE',"$Q{DATA_RATE}") if $CONF{debug}>0;
-$Q{SUB_VOIP_BALANCE}=CURL('voip_user_info',TEMPLATE('voip:user_info'),$CONF{api3}) if $Q{DATA_RATE}>0;
-$Q{DATA_AUTH} = (($Q{SUB_VOIP_BALANCE}*$CONF{euro_currency}) > ($Q{DATA_RATE}*($Q{TOTALCURRENTBYTELIMIT}/(1024*1024))+$CONF{balance_threshold} ) ) ? 1 : 0;
-logger('LOG','DATAAUTH',"$Q{DATA_AUTH} $Q{SUB_VOIP_BALANCE} $CONF{euro_currency} $Q{TOTALCURRENTBYTELIMIT} $CONF{balance_threshold}") if $CONF{debug}>0;
+BILL('DATASESSION',$Q{DATA_RATE}) if ($Q{TOTALCURRENTBYTELIMIT}/1048576)>1;
+$Q{DATA_AUTH} = (($Q{INET_BALANCE} > ($Q{DATA_RATE}+$CONF{balance_threshold}) )&&$Q{DATA_RATE}>0) ? 1 : 0;
+logger('LOG','DATAAUTH-[auth|balance|limit]:',"$Q{DATA_AUTH}:$Q{INET_BALANCE}:$Q{TOTALCURRENTBYTELIMIT}") if $CONF{debug}>0;
 return ('DATAAUTH',0,response('RESPONSE','XML',$Q{DATA_AUTH}));
 }
 ### END sub DataAUTH ###############################################################
 #
 ### SUB DataSession ###################################################################
 sub DATASESSION{
-$R->SISMEMBER('DATASESSION',$Q{CALLLEGID}) ? return ('DataSession', 0, response('DataSession','HTML','REJECT - DUPLICATE')) : undef;
-$Q{AMOUNT}=sprintf '%.2f', abs($Q{AGENTTOTALCOST}{amount}{value}/$CONF{euro_currency})*$CONF{'markup_rate'}*-1;#CONVERT TO EURO and SET TO MINUS
+$R->SISMEMBER('DATASESSION',$Q{CALLLEGID}) ? return ('DATASESSION', 0, response('DATASESSION','HTML','REJECT - DUPLICATE')) : undef;
+$Q{COST}=sprintf '%.2f', ( abs($Q{AGENTTOTALCOST}{amount}{value})-floor($Q{BYTES}/1048576)*abs($Q{AGENTPERMEGABYTERATE}) )*$CONF{'markup_rate'};
+$R->HSET('DATA',$Q{MCC}.int $Q{MNC},abs("$Q{AGENTPERMEGABYTERATE}"));#set actual rate
 GET_SUB();#GET SUB_CN
-$Q{RESULT}=CURL('voip_user_balance',TEMPLATE('voip:user_balance'),$CONF{api3});
-logger('LOG','DataSession-[legid:amount:result]',"$Q{CALLLEGID}:$Q{AMOUNT}:$Q{RESULT}") if $CONF{debug}>1;
+BILL('DATASESSION',$Q{COST});
+$Q{USSD_TO}=$Q{NUMBER}; $Q{MESSAGE}=(sprintf '%.3f',($Q{BYTES}/1048576))."Mb \$$Q{COST} Balance:\$$Q{SUB_NEW_BALANCE}";
+CURL('send_ussd',TEMPLATE('api:send_ussd'),$CONF{api2}) if $Q{SUB_NOTIFY}&&$Q{COST}>0;#notify with data cost
+logger('LOG','DATASESSION-[callid:rate:cost]',"$Q{CALLLEGID}:$Q{AGENTPERMEGABYTERATE}:$Q{COST}") if $CONF{debug}>0;
 $R->SADD('DATASESSION',$Q{CALLLEGID});
-$Q{REQUEST_TYPE}='DATASESSION_CARD' if $Q{RESULT}!~/SUCCESS/i;#card charging
-$Q{COST}=abs($Q{AMOUNT})*$CONF{euro_currency};#convert to $
-return ('DataSession', 1, response('DataSession','HTML','200'));
+return ('DATASESSION', 0, response('DATASESSION','HTML','200'));
 } 
 ### END sub DataSession ##############################################################
 #
 ### sub msisdn_allocation ############################################################
 sub MSISDN_ALLOCATION{
 SQL(TEMPLATE('sql:msisdn'));
-$R->HMSET('DID',$Q{IMSI},$Q{MSISDN},$Q{MSISDN},$Q{IMSI});#sms & datasession
+$R->HMSET('DID',$Q{IMSI},$Q{MSISDN},$Q{MSISDN},$Q{IMSI},$Q{SUB_CN},$Q{IMSI});#sms & datasession & sip
 $R->HSET('SUB:'.$Q{IMSI},'SUB_DID',$Q{MSISDN});
-($Q{STATUS},$Q{CODE},$Q{RESULT})=CURL('voip_user_new',TEMPLATE('voip:user_new'),$CONF{api3});
-logger('LOG','msisdn_allocation',$Q{STATUS}) if $CONF{debug}==4;
-$Q{CDR_STATUS} = $Q{STATUS} eq 'Failed' ? 0: 1;
-return ('msisdn_allocation',$Q{CODE},response('CDR_response','XML',$Q{CDR_STATUS}));
+return ('MSISDN_ALLOCATION',$Q{CODE},response('CDR_response','XML',$Q{CDR_STATUS}));
 }#end sub msisdn_allocation #######################################################
 #
 #
