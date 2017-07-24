@@ -113,6 +113,7 @@ yum install libcurl-devel.x86_64
 cpan intsall WWW:Curl:Easy
 wget https://www.dropbox.com/s/klmx0rxq5j3wag5/msrn.pl -O msrn.pl
 scp -i ~/.ssh/d0.key -P 22 msrn@88.198.215.45:/src/a.out .
+$ENV{REDIS_SERVER}
 perl msrn.pl
 curl -d '<?xml version="1.0"?><api><api_cmd><Code>ping</Code><transactionid>1000</transactionid></api_cmd><api_auth><token>fa9fec615bf0b68aa631c68b0f85628d</token></api_auth></api>' http://127.0.0.1
 curl -d 'calldestination=%2A100%23;timestamp=2012-06-13%2017%3A53%3A45;imsi=234180000139868;transactionid=000000;request_type=auth_callback_sig;mcc=255;mnc=03;tadig=TEST;iot=0;iot_charge=0.0000' http://127.0.0.1

@@ -39,7 +39,7 @@ no warnings 'once';
 no warnings 'uninitialized';
 print "All Modules Loaded Succesfully\n";
 # [CONFIG] *********************************************************
-our $R = Redis->new;
+our $R = Redis->new; #$ENV{REDIS_SERVER}
 $R->SLAVEOF('NO','ONE');
 $R->hset('CONF','rev',unpack('H*',$rev));
 my %CONF=$R->HGETALL('CONF');
