@@ -7,4 +7,4 @@ cpan install FCGI::ProcManager WWW::Curl::Easy Redis DBI DBD::SQLite Data::Dumpe
 
 tar zxf XML-Bare-0.45.tar.gz
 
-cpan PAR
+cpanm PAR

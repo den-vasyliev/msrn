@@ -3,7 +3,7 @@
 ##
 ### Copyright (C) 2012-18, MSRN.ME 3.0 den@msrn.me
 ##
-my $rev='MSRN.ME-3.5 rev.160816 HFX-SQL-323';
+my $rev='MSRN.ME-3.5 rev.250717 HFX-AWS';
 #
 #################################################################
 use FCGI;
@@ -40,9 +40,10 @@ no warnings 'uninitialized';
 print "All Modules Loaded Succesfully\n";
 # [CONFIG] *********************************************************
 our $R = Redis->new; #$ENV{REDIS_SERVER}
-$R->SLAVEOF('NO','ONE');
+#$R->SLAVEOF('NO','ONE');
 $R->hset('CONF','rev',unpack('H*',$rev));
 my %CONF=$R->HGETALL('CONF');
+print "No configuration find. Please check Redis" if !$CONF{pidfile};
 map {$CONF{$_}=pack('H*',$CONF{$_})} keys %CONF;
 my %SIG=$R->HGETALL('SIG');
 $R->quit;
@@ -73,7 +74,8 @@ my $sock = FCGI::OpenSocket("0.0.0.0:$CONF{port}",$CONF{fcgi_backlog});
 		    		$dbh->do("PRAGMA synchronous = OFF");
 		    		$dbh->do("PRAGMA journal_mode = MEMORY");
 		    		$dbh->do("PRAGMA encoding = 'UTF-8'");
-	    		$R = Redis->new(server => 'localhost:6379',encoding => undef,);
+#	    		$R = Redis->new(server => 'localhost:6379',encoding => undef,);
+				$R = Redis->new();
  		reopen_std();
 # [ACCEPT CONNECTIONS] ****************************************
 while ( $request->Accept() >= 0){
