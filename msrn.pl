@@ -43,7 +43,7 @@ our $R = Redis->new; #$ENV{REDIS_SERVER}
 #$R->SLAVEOF('NO','ONE');
 $R->hset('CONF','rev',unpack('H*',$rev));
 my %CONF=$R->HGETALL('CONF');
-print "No configuration found. Please check Redis"&&exit 42 if !$CONF{pidfile};
+if ( !$CONF{pidfile} ) {print "Configuration not found. Please check Redis"; exit 42};
 map {$CONF{$_}=pack('H*',$CONF{$_})} keys %CONF;
 my %SIG=$R->HGETALL('SIG');
 $R->quit;
