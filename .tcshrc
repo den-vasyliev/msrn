@@ -1,6 +1,0 @@
-set history = 2000          # History remembered is 2000
-set savehist = (2000 merge) # Save and merge with existing saved 
-set histfile = ~/.tcsh_history
-bindkey -k up history-search-backward
-bindkey -k down history-search-forward
-alias red redis-cli 

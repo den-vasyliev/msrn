@@ -1,0 +1,103 @@
+
+        <script src="http://www.amcharts.com/lib/3/ammap.js" type="text/javascript"></script>
+        <script src="http://www.amcharts.com/lib/3/maps/js/worldHigh.js" type="text/javascript"></script>
+        <div id="mapdiv" style="width: 100%; height: 450px;"></div>​
+        <div style="font-size: 70%; padding: 5px; text-align: center;  background-color: #535364; margin-top: 1px; color: #CDCDCD;"><a href="http://news.msrn.me" style="color: #CDCDCD;text-decoration:none;">25% (63 из 250) СТРАН УЖЕ ПРОТЕСТИРОВАЛИ ​CALL.ME - РАБОТАЕТ</a>​</div>​
+        <script type="text/javascript">
+            var map;
+            AmCharts.ready(function() {
+                map                  = new AmCharts.AmMap();
+                map.pathToImages     = "http://www.amcharts.com/lib/3/images/";
+                map.panEventsEnabled = true;
+                map.backgroundColor  = "#535364";
+                map.backgroundAlpha  = 1;
+
+                map.zoomControl.panControlEnabled  = false;
+                map.zoomControl.zoomControlEnabled = false;
+
+                var dataProvider     = {
+                    mapVar          : AmCharts.maps.worldHigh,
+                    getAreasFromMap : true,
+                    areas           : [
+{ id: 'AT', showAsSelected: true },
+{ id: 'AZ', showAsSelected: true },
+{ id: 'BY', showAsSelected: true },
+{ id: 'BG', showAsSelected: true },
+{ id: 'HR', showAsSelected: true },
+{ id: 'CY', showAsSelected: true },
+{ id: 'CZ', showAsSelected: true },
+{ id: 'DK', showAsSelected: true },
+{ id: 'EE', showAsSelected: true },
+{ id: 'FI', showAsSelected: true },
+{ id: 'FR', showAsSelected: true },
+{ id: 'GE', showAsSelected: true },
+{ id: 'DE', showAsSelected: true },
+{ id: 'GR', showAsSelected: true },
+{ id: 'HU', showAsSelected: true },
+{ id: 'IS', showAsSelected: true },
+{ id: 'IT', showAsSelected: true },
+{ id: 'LV', showAsSelected: true },
+{ id: 'LT', showAsSelected: true },
+{ id: 'MD', showAsSelected: true },
+{ id: 'MC', showAsSelected: true },
+{ id: 'ME', showAsSelected: true },
+{ id: 'NL', showAsSelected: true },
+{ id: 'NO', showAsSelected: true },
+{ id: 'PL', showAsSelected: true },
+{ id: 'RO', showAsSelected: true },
+{ id: 'RU', showAsSelected: true },
+{ id: 'SM', showAsSelected: true },
+{ id: 'SK', showAsSelected: true },
+{ id: 'SI', showAsSelected: true },
+{ id: 'ES', showAsSelected: true },
+{ id: 'SE', showAsSelected: true },
+{ id: 'CH', showAsSelected: true },
+{ id: 'TR', showAsSelected: true },
+{ id: 'UA', showAsSelected: true },
+{ id: 'GB', showAsSelected: true },
+{ id: 'VA', showAsSelected: true },
+{ id: 'CA', showAsSelected: true },
+{ id: 'CU', showAsSelected: true },
+{ id: 'DO', showAsSelected: true },
+{ id: 'MX', showAsSelected: true },
+{ id: 'US', showAsSelected: true },
+{ id: 'BR', showAsSelected: true },
+{ id: 'CD', showAsSelected: true },
+{ id: 'EG', showAsSelected: true },
+{ id: 'KE', showAsSelected: true },
+{ id: 'MA', showAsSelected: true },
+{ id: 'TN', showAsSelected: true },
+{ id: 'CN', showAsSelected: true },
+{ id: 'HK', showAsSelected: true },
+{ id: 'IR', showAsSelected: true },
+{ id: 'IQ', showAsSelected: true },
+{ id: 'IL', showAsSelected: true },
+{ id: 'MV', showAsSelected: true },
+{ id: 'SG', showAsSelected: true },
+{ id: 'LK', showAsSelected: true },
+{ id: 'TJ', showAsSelected: true },
+{ id: 'TH', showAsSelected: true },
+{ id: 'TM', showAsSelected: true },
+{ id: 'AE', showAsSelected: true },
+{ id: 'UZ', showAsSelected: true },
+{ id: 'YE', showAsSelected: true },
+{ id: 'ID', showAsSelected: true }
+                    ]
+                };
+
+                map.dataProvider     = dataProvider;
+
+                map.areasSettings    = {
+                    autoZoom             : false,
+                    color                : "#CDCDCD",
+                    colorSolid           : "#5EB7DE",
+                    selectedColor        : "#5EB7DE",
+                    outlineColor         : "#666666",
+                    rollOverColor        : "#88CAE7",
+                    rollOverOutlineColor : "#FFFFFF"
+                };
+
+                map.write("mapdiv");
+            });
+        </script>
+        
