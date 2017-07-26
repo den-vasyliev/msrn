@@ -3,7 +3,7 @@
 ##
 ### Copyright (C) 2012-18, MSRN.ME 3.0 den@msrn.me
 ##
-my $rev='MSRN.ME-3.5 rev.250717 HFX-AWS';
+my $rev='MSRN.ME-3.5 rev.270717 HFX-AWS';
 #
 #################################################################
 use FCGI;
@@ -74,7 +74,7 @@ my $sock = FCGI::OpenSocket("0.0.0.0:$CONF{port}",$CONF{fcgi_backlog});
 		    		$dbh->do("PRAGMA synchronous = OFF");
 		    		$dbh->do("PRAGMA journal_mode = MEMORY");
 		    		$dbh->do("PRAGMA encoding = 'UTF-8'");
-#	    		$R = Redis->new(server => 'localhost:6379',encoding => undef,);
+#	    		$R = Redis->new(encoding => undef);
 				$R = Redis->new();
  		reopen_std();
 # [ACCEPT CONNECTIONS] ****************************************
@@ -116,7 +116,7 @@ sub reopen_std {
 #
 ########## MAIN #################################################
 sub main {
-$R->SLAVEOF('NO','ONE');
+#$R->SLAVEOF('NO','ONE');
 	XML_PARSE($Q{REQUEST},'xml') ? undef : $Q{REQUEST_TYPE}=~/GUI/ ? return GUI() : return response('ERROR','ERROR','SORRY REQUEST NOT ACCEPTED #'.__LINE__);
 # [GET SUB] ************************************************************************
 !GET_SUB() && $Q{IMSI} ? return response('ERROR','ERROR','SORRY SUBSCRIBER NOT DEFINED #'.__LINE__) : undef;
