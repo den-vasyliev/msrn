@@ -1,6 +1,6 @@
 // DataTable 03082014 18541
 //	sSession="";
-	var hHost="http://msrn.me";
+	var hHost="http://api.msrn.me";
 	var PayHost="https://www.liqpay.com/?do=clickNbuy";
 	var PayXML;
 	var PayKEY;
