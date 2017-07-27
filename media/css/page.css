@@ -1,0 +1,55 @@
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+ * General page setup
+ */
+#dt_msrn {
+	font: 80%/1.45em "Lucida Grande", Verdana, Arial, Helvetica, sans-serif;
+	margin: 0;
+	padding: 0;
+	color: #333;
+	background-color: #fff;
+}
+
+
+#dt_msrn #container {
+	width: 900px;
+	margin: 20px auto;
+	padding: 0;
+}
+
+
+#dt_msrn label{
+	cursor: pointer
+}
+#dt_msrn #footer {
+	margin: 50px auto 0 auto;
+	padding: 0;
+}
+
+
+#dt_msrn .spacer {
+	height: 20px;
+	clear: both;
+}
+
+
+
+#dt_msrn h1 {
+	margin-top: 2em;
+	font-size: 1.3em;
+	font-weight: normal;
+	line-height: 1.6em;
+	color: #4E6CA3;
+	border-bottom: 1px solid #B0BED9;
+	clear: both;
+}
+
+#dt_msrn a {
+	color: #0063DC;
+	text-decoration: none;
+}
+
+#dt_msrn a:hover {
+	text-decoration: underline;
+}
+

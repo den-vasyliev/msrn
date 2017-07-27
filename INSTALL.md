@@ -1,26 +1,32 @@
 # INSTALL
 
-sudo bash
+# aws configure
+ 
+FROM ubuntu:17.04
 
-yum -y install git nginx
+# Install dependencies
+RUN apt-get update -y
+RUN apt-get install -y git nginx
 
-git -C /opt clone https://github.com/den-vasyliev/msrn.git
+# Install app
+WORKDIR /opt
+RUN git -C /opt clone https://github.com/den-vasyliev/msrn.git
+WORKDIR /opt/msrn
+COPY conf/* /etc/nginx
+ADD media /usr/share/nginx/html
+RUN "aws s3 cp s3://msrn/db/msrn.db ."
 
-cd /opt/msrn;unzip "*.Z"
+# Configure
+ENV REDIS_SERVER msrn-cache.yrpj34.ng.0001.euc1.cache.amazonaws.com:6379
+RUN "service nginx start"
+RUN ["chmod", "+x", "msrn.bin"]
 
-cp conf/* /etc/nginx
+EXPOSE 80
+EXPOSE 443
 
-cp -r media /usr/share/nginx/html
+# Run app
+CMD  "./msrn.bin"
 
-service nginx start
-
-chmod +x msrn.bin
-
-aws configure
-
-aws s3 cp s3://msrn/db/msrn.db .
-
-env "REDIS_SERVER=msrn-cache.yrpj34.ng.0001.euc1.cache.amazonaws.com:6379"  ./msrn.bin
-
-curl -d 'request_type=api_cmd;code=version;token=fa9fec615bf0b68aa631c68b0f85628d' 127.0.0.1
+#Test
+#curl -d 'request_type=api_cmd;code=version;token=fa9fec615bf0b68aa631c68b0f85628d' 127.0.0.1
 
