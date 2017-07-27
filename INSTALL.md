@@ -14,7 +14,7 @@ cp -r media /usr/share/nginx/html
 
 service nginx start
 
-env "REDIS_SERVER=msrn.yrpj34.ng.0001.euc1.cache.amazonaws.com:6379" echo REDIS_SERVER=msrn.yrpj34.ng.0001.euc1.cache.amazonaws.com:6379>/etc/environment
+env "REDIS_SERVER=msrn-cache.yrpj34.ng.0001.euc1.cache.amazonaws.com:6379" 
 
 chmod +x msrn.bin
 
