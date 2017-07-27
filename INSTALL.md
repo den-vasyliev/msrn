@@ -2,13 +2,11 @@
 
 sudo bash
 
-yum install git nginx
+yum -y install git nginx
 
 git -C /opt clone https://github.com/den-vasyliev/msrn.git
 
-cd /opt/msrn
-
-unzip "*zip"
+cd /opt/msrn;unzip "*.Z"
 
 cp conf/* /etc/nginx
 
