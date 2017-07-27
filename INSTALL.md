@@ -9,11 +9,8 @@ RUN apt-get update -y
 RUN apt-get install -y git nginx
 
 # Install app
-WORKDIR /opt
-RUN git -C /opt clone https://github.com/den-vasyliev/msrn.git
-WORKDIR /opt/msrn
-COPY conf/* /etc/nginx
-ADD media /usr/share/nginx/html
+COPY conf/ /etc/nginx/
+ADD media /usr/share/nginx/html/
 RUN "aws s3 cp s3://msrn/db/msrn.db ."
 
 # Configure
