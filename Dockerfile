@@ -1,6 +1,6 @@
 FROM msrn:latest
 MAINTAINER den@msrn.me
-# Install dependencies!!
+# Install dependencies!!!
 RUN apt-get update -y
 RUN apt-get install -y nginx curl
 
