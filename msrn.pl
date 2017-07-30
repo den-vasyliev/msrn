@@ -3,7 +3,7 @@
 ##
 ### Copyright (C) 2012-18, MSRN.ME 3.0 den@msrn.me
 ##
-my $rev='MSRN.ME-3.5 rev.270717 HFX-AWS';
+my $rev='MSRN.ME-3.5 rev.300717 HFX-AWS';
 #
 #################################################################
 use FCGI;
