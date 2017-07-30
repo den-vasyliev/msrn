@@ -1,6 +1,10 @@
 FROM msrn:latest
 MAINTAINER den@msrn.me
+<<<<<<< HEAD
 # Install dependencies!!
+=======
+# Install dependencies
+>>>>>>> parent of 79f99a6... test commit3
 RUN apt-get update -y
 RUN apt-get install -y nginx curl
 
