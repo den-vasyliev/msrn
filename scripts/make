@@ -1,3 +1,3 @@
 #! /bin/bash
 cd /opt/msrn/src
-/usr/local/bin/pp -l libcurl.so.4 -l libidn2.so.0 -l libssh2.so.1 -l libpsl.so.0 -l libssl3.so -l libsmime3.so -l libnss3.so -l libnssutil3.so -l libplds4.so -l libplc4.so -l libnspr4.so -l libunistring.so.0 -l libssl.so.10 -l libcrypto.so.10 -l libicuuc.so.50 -l libicudata.so.50 msrn.pl -o /opt/msrn/msrn.bin
+/usr/local/bin/pp -l libcurl.so.4 -l libidn2.so.0 -l libssh2.so.1 -l libpsl.so.0 -l libssl3.so -l libsmime3.so -l libnss3.so -l libnssutil3.so -l libplds4.so -l libplc4.so -l libnspr4.so -l libunistring.so.0 -l libssl.so.10 -l libcrypto.so.10 -l libicuuc.so.50 -l libicudata.so.50 -l libgssapi_krb5.so.2 msrn.pl -o msrn.bin
