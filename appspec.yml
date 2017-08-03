@@ -4,18 +4,22 @@ files:
   - source: /
     destination: /opt/msrn
 hooks:
+  BeforeInstall:
+    - location: scripts/mkdir
+      timeout: 10
+      runas: root
   AfterInstall:
     - location: scripts/make
-      timeout: 300
+      timeout: 30
       runas: root
     - location: scripts/build
-      timeout: 300
+      timeout: 30
       runas: root
   ApplicationStart:
     - location: scripts/start
-      timeout: 300
+      timeout: 10
       runas: root
   ApplicationStop:
     - location: scripts/stop
-      timeout: 300
+      timeout: 10
       runas: root
