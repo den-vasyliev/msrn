@@ -1,0 +1,22 @@
+version: 0.0
+os: linux
+path: scripts
+files:
+  - source: /
+    destination: /opt/msrn
+hooks:
+  AfterInstall:
+    - location: {{path}}/make
+      timeout: 300
+      runas: root
+    - location: {{path}}/build
+      timeout: 300
+      runas: root
+  ApplicationStart:
+    - location: {{path}}/start
+      timeout: 300
+      runas: root
+  ApplicationStop:
+    - location: {{path}}/stop
+      timeout: 300
+      runas: root
