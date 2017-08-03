@@ -5,6 +5,10 @@ files:
   - source: /
     destination: /opt/msrn
 hooks:
+  BeforeInstall:
+    - location: {{path}}/stop
+      timeout: 300
+      runas: root
   AfterInstall:
     - location: {{path}}/make
       timeout: 300
