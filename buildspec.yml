@@ -3,21 +3,22 @@ version: 0.2
 phases:
   install:
     commands:
-      - echo Nothing to do in the pre_build phase... `echo $PWD`
-      - apt-get update
-      - apt-get install -y docker
+      - echo INSTALL started on `date` `echo $PWD`
+      - cp src/msrn.pl /usr/src/app/
   pre_build:
     commands:
-      - echo Nothing to do in the pre_build phase...
-      - cd src&&pwd
+      - echo PRE-BUILD started on `date`
+      - cd /usr/src/app
   build:
     commands:
-      - echo Build started on `date`
-      - docker run -v $PWD/bin:/usr/src/app/bin --name msrn-dev msrn-dev
+      - echo BUILD started on `date`
+      - /usr/local/bin/carton exec pp msrn.pl -o bin/msrn.bin
   post_build:
     commands:
-      - echo Build completed on `ls`
+      - echo POST_BUILD completed $CODEBUILD_SRC_DIR on `date`
+      - cp bin/msrn.bin $CODEBUILD_SRC_DIR
 artifacts:
   files:
-    - bin/msrn.bin
+    - msrn.bin
   discard-paths: yes
+  
