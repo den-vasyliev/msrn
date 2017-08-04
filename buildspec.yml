@@ -4,7 +4,8 @@ phases:
   install:
     commands:
       - echo Nothing to do in the pre_build phase... `echo $PWD`
-      - apt-get install docker
+      - apt-get update
+      - apt-get install -y docker
   pre_build:
     commands:
       - echo Nothing to do in the pre_build phase...
@@ -18,5 +19,5 @@ phases:
       - echo Build completed on `ls`
 artifacts:
   files:
-    - msrn.bin
+    - bin/msrn.bin
   discard-paths: yes
