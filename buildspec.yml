@@ -2,25 +2,25 @@ version: 0.2
 
 env:
   variables:
-    BUILD_TYPE: "test"
+    PWD:`pwd`
 
 phases:
   install:
     commands:
-      - echo Nothing to do in the pre_build phase... `pwd`
+      - echo Nothing to do in the pre_build phase... `echo $PWD`
+      - apt-get install docker
   pre_build:
     commands:
       - echo Nothing to do in the pre_build phase...
-      - cd src
+      - cd src&&pwd
   build:
     commands:
       - echo Build started on `date`
-      - docker container ls
-      - touch test.bin
+      - docker run -v $PWD/bin:/usr/src/app/bin --name msrn-dev msrn-dev
   post_build:
     commands:
-      - echo Build completed on `ls -l`
+      - echo Build completed on `ls`
 artifacts:
   files:
-    - test.bin
+    - msrn.bin
   discard-paths: yes
