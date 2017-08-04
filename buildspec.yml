@@ -2,7 +2,8 @@ version: 0.2
 
 env:
   variables:
-    REV:"rev.040817.HFX-NETCURL" 
+    REV: "rev.040817.HFX-NETCURL" 
+    
 phases:
   install:
     commands:
