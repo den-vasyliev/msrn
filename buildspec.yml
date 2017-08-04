@@ -11,9 +11,11 @@ phases:
   pre_build:
     commands:
       - echo Nothing to do in the pre_build phase...
+      - cd src
   build:
     commands:
       - echo Build started on `date`
+      - docker container ls
       - touch test.bin
   post_build:
     commands:
