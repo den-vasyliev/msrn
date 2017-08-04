@@ -1,0 +1,26 @@
+version: 0.2
+
+env:
+  variables:
+    BIN_TYPE: "PRE-PROD"
+
+phases:
+  install:
+    commands:
+      - echo Install started on `docker container ls`
+  pre_build:
+    commands:
+      - echo Nothing to do in the pre_build phase...
+	  - cd src
+  build:
+    commands:
+      - echo Build started on `date`
+      - docker run -v bin:/usr/src/app/bin --name msrn-dev msrn-dev
+  post_build:
+    commands:
+      - echo Build completed on `date`
+	  - echo ls -l
+artifacts:
+  files:
+    - src/bin/msrn.bin
+  discard-paths: yes
