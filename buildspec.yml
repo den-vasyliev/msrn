@@ -22,8 +22,10 @@ phases:
       - echo POST_BUILD-$REV completed $CODEBUILD_SRC_DIR on `date`
       - cp bin/msrn.bin $CODEBUILD_SRC_DIR/src
       - tar zcf $CODEBUILD_BUILD_ID.tgz src
+      - cp $CODEBUILD_BUILD_ID.tgz last.tar.gz
 artifacts:
   files:
-    - *.tgz
+    - $CODEBUILD_BUILD_ID.tgz
+    - last.tar.gz
   discard-paths: yes
   
