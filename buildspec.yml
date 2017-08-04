@@ -7,7 +7,7 @@ env:
 phases:
   install:
     commands:
-      - echo INSTALL $REV started on `date` `echo $PWD`
+      - echo INSTALL-$REV started on `date` `echo $PWD`
       - cp src/msrn.pl /usr/src/app/
   pre_build:
     commands:
@@ -15,14 +15,14 @@ phases:
       - cd /usr/src/app
   build:
     commands:
-      - echo BUILD started on `date`
-      - /usr/local/bin/carton exec pp msrn.pl -o bin/msrn.bin.$REV
+      - echo BUILD-$REV started on `date`
+      - /usr/local/bin/carton exec pp msrn.pl -o bin/msrn.bin-$REV
   post_build:
     commands:
       - echo POST_BUILD completed $CODEBUILD_SRC_DIR on `date`
-      - cp bin/msrn.bin.$REV $CODEBUILD_SRC_DIR
+      - cp bin/msrn.bin-$REV $CODEBUILD_SRC_DIR
 artifacts:
   files:
-    - msrn.bin.$REV
+    - msrn.bin-$REV
   discard-paths: yes
   
