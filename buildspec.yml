@@ -11,7 +11,7 @@ phases:
   pre_build:
     commands:
       - echo Nothing to do in the pre_build phase...
-	  - cd src
+      - cd src
   build:
     commands:
       - echo Build started on `date`
@@ -19,7 +19,7 @@ phases:
   post_build:
     commands:
       - echo Build completed on `date`
-	  - echo ls -l
+      - echo ls -l
 artifacts:
   files:
     - src/bin/msrn.bin
