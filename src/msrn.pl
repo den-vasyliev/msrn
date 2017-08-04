@@ -3,7 +3,7 @@
 ##
 ### Copyright (C) 2012-18, MSRN.ME 3.0 den@msrn.me
 ##
-my $rev='MSRN.ME-3.5 rev.030817 HFX-FORK';
+my $rev='MSRN.ME-3.5 rev.040817.HFX-NETCURL';
 #
 #################################################################
 use FCGI;
