@@ -2,7 +2,7 @@ version: 0.2
 
 env:
   variables:
-    REV: "rev.040817-02.HFX-NETCURL"
+    REV: "rev.050817-02.HFX-NETCURL"
     
 phases:
   install:
@@ -21,11 +21,12 @@ phases:
     commands:
       - echo POST_BUILD-$REV completed $CODEBUILD_SRC_DIR on `date`
       - cp bin/msrn.bin $CODEBUILD_SRC_DIR/src
+      - cd $CODEBUILD_SRC_DIR
       - tar zcf $CODEBUILD_BUILD_ID.tgz src
       - cp $CODEBUILD_BUILD_ID.tgz last.tar.gz
 artifacts:
   files:
-    - $CODEBUILD_BUILD_ID.tgz
+    - *.tgz
     - last.tar.gz
   discard-paths: yes
   
