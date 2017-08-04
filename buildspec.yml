@@ -1,6 +1,6 @@
 version: 0.2
 
-ienv:
+env:
   variables:
     REV:"rev.040817.HFX-NETCURL" 
 phases:
