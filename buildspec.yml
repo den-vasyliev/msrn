@@ -2,24 +2,23 @@ version: 0.2
 
 env:
   variables:
-    JAVA_HOME: "/usr/lib/jvm/java-8-openjdk-amd64"
+    BUILD_TYPE: "test"
 
 phases:
   install:
     commands:
-      - apt-get update -y
-      - apt-get install -y maven
+      - echo Nothing to do in the pre_build phase... `pwd`
   pre_build:
     commands:
       - echo Nothing to do in the pre_build phase...
   build:
     commands:
       - echo Build started on `date`
-      - mvn install
+      - touch test.bin
   post_build:
     commands:
-      - echo Build completed on `date`
+      - echo Build completed on `ls -l`
 artifacts:
   files:
-    - target/messageUtil-1.0.jar
+    - test.bin
   discard-paths: yes
