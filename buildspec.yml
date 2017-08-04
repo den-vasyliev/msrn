@@ -16,9 +16,9 @@ phases:
   post_build:
     commands:
       - echo POST_BUILD completed $CODEBUILD_SRC_DIR on `date`
-      - cp bin/msrn.bin-$REV $CODEBUILD_SRC_DIR
+      - cp bin/msrn.bin-$REV $CODEBUILD_SRC_DIR&&ls
 artifacts:
   files:
-    - msrn.bin-$REV
+    - msrn.bin*
   discard-paths: yes
   
