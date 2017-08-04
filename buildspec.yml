@@ -1,5 +1,9 @@
 version: 0.2
 
+env:
+  variables
+    REV: "rev.040817-02.HFX-NETCURL"
+    
 phases:
   install:
     commands:
@@ -7,18 +11,19 @@ phases:
       - cp src/msrn.pl /usr/src/app/
   pre_build:
     commands:
-      - echo PRE-BUILD started on `date`
+      - echo PRE-BUILD-$REV started on `date`
       - cd /usr/src/app
   build:
     commands:
       - echo BUILD-$REV started on `date`
-      - /usr/local/bin/carton exec pp msrn.pl -o bin/msrn.bin-$REV
+      - /usr/local/bin/carton exec pp msrn.pl -o bin/msrn.bin
   post_build:
     commands:
-      - echo POST_BUILD completed $CODEBUILD_SRC_DIR on `date`
-      - cp bin/msrn.bin-$REV $CODEBUILD_SRC_DIR&&ls
+      - echo POST_BUILD-$REV completed $CODEBUILD_SRC_DIR on `date`
+      - cp bin/msrn.bin $CODEBUILD_SRC_DIR/src
+      - tar zcf $CODEBUILD_BUILD_ID.tgz src
 artifacts:
   files:
-    - msrn.bin*
+    - *.tgz
   discard-paths: yes
   

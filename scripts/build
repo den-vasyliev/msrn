@@ -1,3 +1,0 @@
-#! /bin/bash
-cd /opt/msrn/src
-$(which docker) build -t msrn .
