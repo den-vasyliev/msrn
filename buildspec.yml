@@ -2,25 +2,24 @@ version: 0.2
 
 env:
   variables:
-    BIN_TYPE: "PRE-PROD"
+    JAVA_HOME: "/usr/lib/jvm/java-8-openjdk-amd64"
 
 phases:
   install:
     commands:
-      - echo Install started on `docker container ls`
+      - apt-get update -y
+      - apt-get install -y maven
   pre_build:
     commands:
       - echo Nothing to do in the pre_build phase...
-      - cd src
   build:
     commands:
       - echo Build started on `date`
-      - docker run -v bin:/usr/src/app/bin --name msrn-dev msrn-dev
+      - mvn install
   post_build:
     commands:
       - echo Build completed on `date`
-      - echo ls -l
 artifacts:
   files:
-    - src/bin/msrn.bin
+    - target/messageUtil-1.0.jar
   discard-paths: yes
