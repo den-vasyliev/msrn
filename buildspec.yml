@@ -23,6 +23,7 @@ phases:
       - cp bin/msrn.bin $CODEBUILD_SRC_DIR/src
 artifacts:
   files:
-    - src
+    - '**/*'
+  base-directory: src
   discard-paths: yes
   
