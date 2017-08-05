@@ -1,0 +1,5 @@
+#! /bin/bash
+HOST_IP=$($(which curl) -s http://169.254.169.254/latest/meta-data/local-ipv4/) 
+$(which docker) run -d -p 35001:35001 -e REDIS_SERVER=${HOST_IP}:6379 --name msrn msrn
+$(which sed) s/==HOST_IP==/${HOST_IP}/ > /opt/msrn/src/conf/nginx.conf < /opt/msrn/src/conf/nginx.tmpl
+$(which docker) run -d -p 80:80  -v /opt/msrn/src/conf/:/etc/nginx -v /opt/msrn/src/media:/usr/share/nginx/media --name nginx nginx

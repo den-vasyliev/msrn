@@ -1,0 +1,4 @@
+#! /bin/bash
+$(which docker) kill msrn
+$(which docker) kill nginx
+yes | $(which docker) container prune
