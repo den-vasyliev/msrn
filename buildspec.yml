@@ -1,25 +1,9 @@
 version: 0.2
-
-env:
-  variables:
-    REV: "rev.050817-05.HFX-NETCURL"
-    
 phases:
-  install:
-    commands:
-      - echo INSTALL-$REV started on `date` `echo $PWD`
-      - cp src/msrn.pl /usr/src/app/
-  pre_build:
-    commands:
-      - echo PRE-BUILD-$REV started on `date`
-      - cd /usr/src/app
   build:
     commands:
-      - echo BUILD-$REV started on `date`
-      - /usr/local/bin/carton exec pp msrn.pl -o $CODEBUILD_SRC_DIR/src/msrn.bin
-  post_build:
-    commands:
-      - echo POST_BUILD-$REV completed $CODEBUILD_SRC_DIR on `date`
+      - cd /usr/src/app 
+      - /usr/local/bin/carton exec pp $CODEBUILD_SRC_DIR/src/msrn.pl -o $CODEBUILD_SRC_DIR/src/msrn.bin
 artifacts:
   files:
     - '**/*'
