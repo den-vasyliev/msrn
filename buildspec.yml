@@ -16,11 +16,10 @@ phases:
   build:
     commands:
       - echo BUILD-$REV started on `date`
-      - /usr/local/bin/carton exec pp msrn.pl -o bin/msrn.bin
+      - /usr/local/bin/carton exec pp msrn.pl -o $CODEBUILD_SRC_DIR/src/msrn.bin
   post_build:
     commands:
       - echo POST_BUILD-$REV completed $CODEBUILD_SRC_DIR on `date`
-      - cp bin/msrn.bin $CODEBUILD_SRC_DIR/src
 artifacts:
   files:
     - '**/*'
