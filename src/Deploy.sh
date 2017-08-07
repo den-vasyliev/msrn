@@ -1,5 +1,5 @@
 #!/bin/bash
-
+#+x
 # required settings
 NODE_NAME="$(curl --silent --show-error --retry 3 http://169.254.169.254/latest/meta-data/instance-id)" # this uses the EC2 instance ID as the node name
 REGION="eu-west-1" # use one of us-east-1, us-west-2, eu-west-1
