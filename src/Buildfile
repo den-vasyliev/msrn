@@ -1,1 +1,2 @@
-make: ./deploy.sh
+make: ./Deploy.sh
+make: go build -o bin/application application.go
