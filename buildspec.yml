@@ -1,24 +1,12 @@
 version: 0.2
-
 phases:
-  install:
-    commands:
-      - echo INSTALL started on `date` `echo $PWD`
-      - cp src/msrn.pl /usr/src/app/
-  pre_build:
-    commands:
-      - echo PRE-BUILD started on `date`
-      - cd /usr/src/app
   build:
     commands:
-      - echo BUILD started on `date`
-      - /usr/local/bin/carton exec pp msrn.pl -o bin/msrn.bin
-  post_build:
-    commands:
-      - echo POST_BUILD completed $CODEBUILD_SRC_DIR on `date`
-      - cp bin/msrn.bin $CODEBUILD_SRC_DIR
+      - cd /usr/src/app 
+      - /usr/local/bin/carton exec pp $CODEBUILD_SRC_DIR/src/msrn.pl -o $CODEBUILD_SRC_DIR/src/msrn.bin
 artifacts:
   files:
-    - msrn.bin
-  discard-paths: yes
+    - '**/*'
+  base-directory: src
+  discard-paths: no
   
