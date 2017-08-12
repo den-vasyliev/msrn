@@ -15,10 +15,9 @@ jobs:
         - /feature-.*/
 
     steps:
-      - run: 
-          command: pwd
-      - run:
-          command: ls
+      - checkout
+      - run: command: pwd
+      - run: command: ls
       - run:
           command: |
             mkdir /usr/src/app
