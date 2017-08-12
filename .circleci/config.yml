@@ -2,5 +2,8 @@ version: 2
 
 jobs:
   build:
+    docker:
+      - image: perl:5.26
+
     steps:
       - checkout
