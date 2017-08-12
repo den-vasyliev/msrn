@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: msrn/msrn-dev
+      - image: msrn/msrn-dev-ci
    
     environment:
       TEST_REPORTS: /tmp/test-reports
