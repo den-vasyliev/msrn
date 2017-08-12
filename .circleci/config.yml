@@ -5,7 +5,7 @@ jobs:
       - image: msrn/msrn-prod
    
     environment:
-      TEST_REPORTS: /tmp/test-reports
+      TEST_REPORTS: /tmp/test-report
 
     working_directory: ~/src
 
