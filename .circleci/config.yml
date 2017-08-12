@@ -8,16 +8,14 @@ jobs:
     steps:
       - checkout
       
-      - run: 
-          command: pwd
-      - run: 
-          command: ls
       - run:
           command: |
             cd src
             /usr/local/bin/cpanm Carton
             /usr/local/bin/carton install
-            /usr/local/bin/carton exec pp msrn.pl -o msrn.bin
+      - run:
+          command: |
+            /usr/local/bin/carton exec pp msrn.pl -o /tmp/artifacts/msrn.bin
    
       # Deploy staging
 #      - deploy:
