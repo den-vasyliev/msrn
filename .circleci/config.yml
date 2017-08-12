@@ -15,13 +15,14 @@ jobs:
         - /feature-.*/
 
     steps:
-      - checkout
-      - run: command: pwd;ls
-      - run: command: cd /usr/src/app
-      - run: command: /usr/local/bin/carton exec pp ~/src/msrn.pl -o ~/src/msrn.bin
+      - run: 
+          command: |
+            pwd;ls
+            cd /usr/src/app
+            /usr/local/bin/carton exec pp ~/src/msrn.pl -o ~/src/msrn.bin
    
       # Deploy staging
-      - deploy:
+#      - deploy:
 #          command: |
 #            if [ "${CIRCLE_BRANCH}" == "staging" ];
 #              then ansible-playbook site.yml -i staging;
@@ -38,7 +39,9 @@ jobs:
       - store_artifacts:
           path: /tmp/artifacts
           destination: build
-          run: command: pwd;ls
+          run: |
+            command: 
+              pwd;ls
 
       # Upload test results
       - store_test_results:
