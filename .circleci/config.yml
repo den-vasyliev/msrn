@@ -4,8 +4,8 @@ jobs:
   build:
     docker:
       - image: perl:5.26
-  
-  working_directory: ~/src
+
+    working_directory: ~/src
   
     steps:
       - checkout
