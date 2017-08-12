@@ -7,3 +7,39 @@ jobs:
 
     steps:
       - checkout
+      - run: command: pwd
+      - run: command: ls
+      - run:
+          command: |
+            mkdir /usr/src/app
+            cp src/cpanfile /usr/src/app
+            cd /usr/src/app
+            /usr/local/bin/cpanm Carton
+            /usr/local/bin/carton install
+            /usr/local/bin/carton exec pp ~/src/msrn.pl -o ~/src/msrn.bin
+   
+      # Deploy staging
+#      - deploy:
+#          command: |
+#            if [ "${CIRCLE_BRANCH}" == "staging" ];
+#              then ansible-playbook site.yml -i staging;
+#            fi
+
+      # Deploy production
+#     - deploy:
+#          command: |
+#            if [ "${CIRCLE_BRANCH}" == "master" ];
+#              then ansible-playbook site.yml -i production;
+#            fi
+
+      # Save artifacts
+      - store_artifacts:
+          path: /tmp/artifacts
+          destination: build
+          run: |
+            command: 
+              pwd;ls
+
+      # Upload test results
+      - store_test_results:
+          path: /tmp/test-reports
