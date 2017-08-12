@@ -12,7 +12,10 @@ jobs:
       
       - run:
           command: |
+            pwd
             /usr/local/bin/cpanm Carton
+            pwd
+            ls
             /usr/local/bin/carton install
       - run:
           command: |
