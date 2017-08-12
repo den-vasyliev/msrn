@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: msrn/msrn-dev-ci:wo_redis
+      - image: perl:5.26
    
     environment:
       TEST_REPORTS: /tmp/test-report
@@ -18,7 +18,11 @@ jobs:
       - run: 
           command: |
             pwd;ls
+            mkdir /usr/src/app
+            cp cpanfile /usr/src/app
             cd /usr/src/app
+            /usr/local/bin/cpanm Carton
+            /usr/local/bin/carton install
             /usr/local/bin/carton exec pp ~/src/msrn.pl -o ~/src/msrn.bin
    
       # Deploy staging
