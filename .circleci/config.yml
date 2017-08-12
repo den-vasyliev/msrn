@@ -5,17 +5,14 @@ jobs:
     docker:
       - image: perl:5.26
 
-    working_directory: src
+    working_directory: ~/project/src
   
     steps:
       - checkout
       
       - run:
           command: |
-            pwd
             /usr/local/bin/cpanm Carton
-            pwd
-            ls
             /usr/local/bin/carton install
       - run:
           command: |
