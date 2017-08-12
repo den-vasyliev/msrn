@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: msrn/msrn-prod
+      - image: msrn/msrn-dev-ci:wo_redis
    
     environment:
       TEST_REPORTS: /tmp/test-report
