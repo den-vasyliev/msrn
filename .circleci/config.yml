@@ -11,10 +11,15 @@ jobs:
       - run:
           command: |
             cd src
+            pwd
             /usr/local/bin/cpanm Carton
             /usr/local/bin/carton install
+            pwd
+            ls
       - run:
           command: |
+            cd src
+            pwd
             /usr/local/bin/carton exec pp msrn.pl -o /tmp/artifacts/msrn.bin
    
       # Deploy staging
