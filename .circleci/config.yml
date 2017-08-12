@@ -1,5 +1,45 @@
-version: 2.0
+version: 2
 jobs:
   build:
     docker:
       - image: msrn/msrn-dev
+   
+    environment:
+      TEST_REPORTS: /tmp/test-reports
+
+    working_directory: ~/src
+
+    branches:
+      ignore:
+        - develop
+        - /feature-.*/
+
+    steps:
+      - checkout
+      - run: command: pwd;ls
+      - run: command: cd /usr/src/app
+      - run: command: /usr/local/bin/carton exec pp ~/src/msrn.pl -o ~/src/msrn.bin
+   
+      # Deploy staging
+      - deploy:
+#          command: |
+#            if [ "${CIRCLE_BRANCH}" == "staging" ];
+#              then ansible-playbook site.yml -i staging;
+#            fi
+
+      # Deploy production
+#     - deploy:
+#          command: |
+#            if [ "${CIRCLE_BRANCH}" == "master" ];
+#              then ansible-playbook site.yml -i production;
+#            fi
+
+      # Save artifacts
+      - store_artifacts:
+          path: /tmp/artifacts
+          destination: build
+          run: command: pwd;ls
+
+      # Upload test results
+      - store_test_results:
+          path: /tmp/test-reports
