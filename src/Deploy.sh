@@ -14,7 +14,7 @@ VALIDATION_PEM="${CHEF_ORGANIZATION}-validator.pem"
 # recommended: upload the chef-client cookbook from the chef supermarket  https://supermarket.chef.io/cookbooks/chef-client
 # Use this to apply sensible default settings for your chef-client config like logrotate and running as a service
 # you can add more cookbooks in the run list, based on your needs
-RUN_LIST="role[msrn-deploy]" # e.g. "recipe[chef-client],recipe[apache2]"
+RUN_LIST="role[msrn_deploy]" # e.g. "recipe[chef-client],recipe[apache2]"
 
 # ---------------------------
 set -e -o pipefail

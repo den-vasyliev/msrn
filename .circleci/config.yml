@@ -1,0 +1,42 @@
+version: 2
+
+jobs:
+  build:
+    docker:
+      - image: perl:5.26
+  
+    steps:
+      - checkout
+      
+      - run:
+          working_directory: src
+          command: |
+            /usr/local/bin/cpanm Carton
+            /usr/local/bin/carton install
+      - run:
+          working_directory: src
+          command: |
+            /usr/local/bin/carton exec pp msrn.pl -o /tmp/artifacts/msrn.bin
+   
+      # Deploy staging
+#      - deploy:
+#          command: |
+#            if [ "${CIRCLE_BRANCH}" == "staging" ];
+#              then ansible-playbook site.yml -i staging;
+#            fi
+
+      # Deploy production
+#     - deploy:
+#          command: |
+#            if [ "${CIRCLE_BRANCH}" == "master" ];
+#              then ansible-playbook site.yml -i production;
+#            fi
+
+      # Save artifacts
+      - store_artifacts:
+          path: /tmp/artifacts
+          destination: build
+
+      # Upload test results
+#      - store_test_results:
+#         path: /tmp/test-reports
