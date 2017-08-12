@@ -14,12 +14,10 @@ jobs:
           command: ls
       - run:
           command: |
-            mkdir /usr/src/app
-            cp src/cpanfile /usr/src/app
-            cd /usr/src/app
+            cd src
             /usr/local/bin/cpanm Carton
             /usr/local/bin/carton install
-            /usr/local/bin/carton exec pp ~/src/msrn.pl -o ~/src/msrn.bin
+            /usr/local/bin/carton exec pp msrn.pl -o msrn.bin
    
       # Deploy staging
 #      - deploy:
@@ -39,10 +37,7 @@ jobs:
       - store_artifacts:
           path: /tmp/artifacts
           destination: build
-          run: |
-            command: 
-              pwd;ls
 
       # Upload test results
-      - store_test_results:
-          path: /tmp/test-reports
+#      - store_test_results:
+#         path: /tmp/test-reports
