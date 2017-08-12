@@ -4,20 +4,17 @@ jobs:
   build:
     docker:
       - image: perl:5.26
-
-    working_directory: ~/project/src
   
     steps:
       - checkout
       
       - run:
+          working_directory: src
           command: |
-            pwd
             /usr/local/bin/cpanm Carton
-            pwd
-            ls
             /usr/local/bin/carton install
       - run:
+          working_directory: src
           command: |
             /usr/local/bin/carton exec pp msrn.pl -o /tmp/artifacts/msrn.bin
    
