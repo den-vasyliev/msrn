@@ -7,7 +7,7 @@ jobs:
     environment:
       TEST_REPORTS: /tmp/test-report
 
-    working_directory: ~/src
+#    working_directory: ~/src
 
     branches:
       ignore:
@@ -18,6 +18,8 @@ jobs:
       - run: 
           command: |
             pwd;ls
+      - run:
+          command: |
             mkdir /usr/src/app
             cp cpanfile /usr/src/app
             cd /usr/src/app
