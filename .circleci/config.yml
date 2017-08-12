@@ -16,12 +16,13 @@ jobs:
 
     steps:
       - run: 
-          command: |
-            pwd;ls
+          command: pwd
+      - run:
+          command: ls
       - run:
           command: |
             mkdir /usr/src/app
-            cp cpanfile /usr/src/app
+            cp src/cpanfile /usr/src/app
             cd /usr/src/app
             /usr/local/bin/cpanm Carton
             /usr/local/bin/carton install
