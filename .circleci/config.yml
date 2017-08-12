@@ -5,7 +5,7 @@ jobs:
     docker:
       - image: perl:5.26
 
-    working_directory: ~/src
+    working_directory: $CIRCLE_WORKING_DIRECTORY/src
   
     steps:
       - checkout
