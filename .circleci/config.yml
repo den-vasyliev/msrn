@@ -43,7 +43,3 @@ jobs:
       # Upload test results
 #      - store_test_results:
 #         path: /tmp/test-reports
-   notify:
-     webhooks:
-       - url: 
-          curl -H "Content-Type: application/json" --data '{"source_type": "Branch", "source_name": "staging"}' -X POST https://registry.hub.docker.com/u/msrn/msrn-pre-prod/trigger/7c5439d1-0017-4763-8252-e17e26f9025b/
