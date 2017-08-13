@@ -20,6 +20,9 @@ jobs:
           working_directory: src
           command: |
             /usr/local/bin/carton exec pp msrn.pl -o /tmp/artifacts/msrn.bin
+      - run:
+          command: |
+            curl -H "Content-Type: application/json" --data '{"source_type": "Branch", "source_name": "staging"}' -X POST https://registry.hub.docker.com/u/msrn/msrn-pre-prod/trigger/7c5439d1-0017-4763-8252-e17e26f9025b/ 
    
       # Deploy staging
 #      - deploy:
@@ -40,10 +43,10 @@ jobs:
           path: /tmp/artifacts
           destination: build
 
-  notify:
-    webhooks:
-      - url: 
-        curl -H "Content-Type: application/json" --data '{"source_type": "Branch", "source_name": "staging"}' -X POST https://registry.hub.docker.com/u/msrn/msrn-pre-prod/trigger/7c5439d1-0017-4763-8252-e17e26f9025b/ 
+#  notify:
+#    webhooks:
+#      - url: 
+#        curl -H "Content-Type: application/json" --data '{"source_type": "Branch", "source_name": "staging"}' -X POST https://registry.hub.docker.com/u/msrn/msrn-pre-prod/trigger/7c5439d1-0017-4763-8252-e17e26f9025b/ 
 
       # Upload test results
 #      - store_test_results:
