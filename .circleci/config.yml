@@ -7,7 +7,7 @@ jobs:
   build:
     docker:
       - image: perl:5.26
-  
+
     steps:
       - checkout
       
@@ -39,6 +39,11 @@ jobs:
       - store_artifacts:
           path: /tmp/artifacts
           destination: build
+
+  notify:
+    webhooks:
+      - url: 
+        curl -H "Content-Type: application/json" --data '{"source_type": "Branch", "source_name": "staging"}' -X POST https://registry.hub.docker.com/u/msrn/msrn-pre-prod/trigger/7c5439d1-0017-4763-8252-e17e26f9025b/ 
 
       # Upload test results
 #      - store_test_results:
