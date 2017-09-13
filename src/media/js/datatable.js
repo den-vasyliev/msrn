@@ -1,4 +1,3 @@
-<<<<<<< Local Changes
 // DataTable 03082014 270717s 18541
 //	sSession="";
 	var hHost="https://api.msrn.me";
@@ -460,4 +459,3 @@ function fnFormatDetails ( data, jT )
 
 		}) // DOCUMENT READY
 // END=======
->>>>>>> External Changes

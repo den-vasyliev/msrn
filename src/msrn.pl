@@ -28,6 +28,7 @@ use POSIX;
 use Time::Local;
 use Time::HiRes qw(gettimeofday);
 use Benchmark qw(:hireswallclock);
+use Net::Statsd;
 use IO::File;
 use File::Copy;
 use Encode;
@@ -76,6 +77,8 @@ my $sock = FCGI::OpenSocket("0.0.0.0:$CONF{port}",$CONF{fcgi_backlog});
 		    		$dbh->do("PRAGMA encoding = 'UTF-8'");
 #	    		$R = Redis->new(encoding => undef);
 				$R = Redis->new();
+				$Net::Statsd::HOST = 'localhost';    # Default
+				$Net::Statsd::PORT = 8125;           # Default
  		reopen_std();
 # [ACCEPT CONNECTIONS] ****************************************
 while ( $request->Accept() >= 0){
@@ -103,6 +106,7 @@ pm_pre_dispatch();
 #**************************************************************************************
 			my $t2=Benchmark->new;
 			my $td0 = timediff($t2, $t0);	
+			logger('METRIC','API','TOTAL');
 			$R->PUBLISH('TIMER',$Q{INNER_TID}.':'.substr($td0->[0],0,8));
 #**************************************************************************************
 pm_post_dispatch();
@@ -125,11 +129,14 @@ sub main {
 	$Q{REQUEST_CODE} = defined $Q{CODE} ? '-['.$Q{CODE}.']' : defined $Q{USSD_CODE} ? '-['.$Q{USSD_CODE}.']' : '';
 	$R->HINCRBY("STAT:AGENT:$Q{AGENT}",'['.substr($Q{TIMESTAMP},0,10)."]-[$Q{REQUEST_TYPE}]$Q{REQUEST_CODE}",1) if $Q{AGENT};
 	$R->HINCRBY("STAT:SUB:$Q{GIMSI}",'['.substr($Q{TIMESTAMP},0,10)."]-[$Q{REQUEST_TYPE}]$Q{REQUEST_CODE}",1) if $Q{IMSI}>0;
+	$Q{METRIC_CODE} = defined $Q{CODE} ? $Q{CODE} : defined $Q{USSD_CODE} ? $Q{USSD_CODE} : 'UNKNOWN';
+	logger('METRIC','REQUESTS',"$Q{REQUEST_TYPE}.$Q{METRIC_CODE}") if $Q{IMSI}>0;
 # [SUB REF] ************************************************************************
 eval{ ($Q{ACTION_STATUS},$Q{ACTION_CODE},$Q{ACTION_RESULT}) = 
 $Q{REQUEST_TYPE}=~/API/i ? API() : $R->HEXISTS("AGENT:$Q{SUB_HASH}",'host') ? AGENT() : $Q{REQUEST_TYPE}=~/(GUI|PAY)/ ? GUI() : SIG() }; 
 		warn $@ if $@;  logger('LOG',"MAIN-ACTION-ERROR",$@) if $@;
 	logger('LOG',"MAIN-ACTION-RESULT","$Q{REQUEST_TYPE}:$Q{ACTION_STATUS}:$Q{ACTION_CODE}");
+			logger('METRIC','REQUEST_TYPE',"$Q{REQUEST_TYPE}");
 			return response('ERROR','ERROR','GENERAL ERROR #'.__LINE__) if $@;
 			return "$Q{ACTION_RESULT}" if $Q{ACTION_STATUS};
 }########## END SUB MAIN ########################################
@@ -158,6 +165,7 @@ switch ($Q{REQUEST_OPTION}){
 	map {$Q{uc $_}=$Q{REQUEST}->{API_AUTH}{$_}{value} if $_!~/^_(i|z|pos)$/i;} keys %{ $Q{REQUEST}->{API_AUTH} };
 		$Q{REQUEST_TYPE}='API';
 		$Q{PARSE_RESULT}=scalar keys %Q;
+		logger('METRIC','XML_PARSE','XML');
 		}
 # [DATA] ************************************************************************
 		elsif(defined $Q{REQUEST}->{REFERENCE}{value} and $Q{REQUEST}->{REFERENCE}{value} eq 'Data'){
@@ -170,6 +178,7 @@ switch ($Q{REQUEST_OPTION}){
 		$Q{CURRENCY}=$Q{AGENTTOTALCOST}{currency}{value};
 		$Q{GIMSI} = scalar ($Q{IMSI}=$R->HGET('DID',$Q{NUMBER}))>0 ? $CONF{imsi_prefix}.$Q{IMSI} :0;
 		$Q{PARSE_RESULT}=scalar keys %Q;
+		logger('METRIC','XML_PARSE','DATASESSION');
 		}#elsif POSTDATA
 # [UNKNOWN FORMAT] ************************************************************************
 		else{#URL ENCODED REQUEST
@@ -190,6 +199,7 @@ switch ($Q{REQUEST_OPTION}){
 				$Q{USSD_CODE}=112;
 			}#if !USSD_CODE
 		$Q{PARSE_RESULT}=scalar keys %Q;
+		logger('METRIC','XML_PARSE',$Q{REQUEST_TYPE});
 		}#else URL ENCODED
 	$Q{IMSI}= $Q{IMSI} ? substr($Q{IMSI},-6,6) :0;
 	$Q{GIMSI}= $Q{IMSI} ? $CONF{imsi_prefix}.$Q{IMSI} :0;
@@ -199,7 +209,7 @@ switch ($Q{REQUEST_OPTION}){
 # [TEXT] ************************************************************************
 	case /PLAINTEXT/ {
 	$Q{PARSE_RESULT}=$Q{REQUEST_LINE};
-	}#TEXT
+}#TEXT
 # [GET MSRN] ************************************************************************
 	case /get_msrn/ {
 		map {$Q{uc $_}=$Q{REQUEST}->{MSRN_Response}{$_}{value} if $_!~/^_?(i|z|pos|imsi|value)$/i} keys %{ $Q{REQUEST}->{MSRN_Response} };
@@ -272,7 +282,7 @@ switch ($Q{REQUEST_OPTION}){
 		logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}","$Q{PIN} $ERROR") if $CONF{debug}>2;
 		$Q{PARSE_RESULT}="$Q{PIN}$ERROR";
 	}#sim info	
-# [SET ISER] ************************************************************************
+# [SET USER] ************************************************************************
 	case 'set_user' {
 		 $Q{STATUS}=$Q{REQUEST}->{status}{value};
 		 $Q{ERROR}=$Q{REQUEST}->{error}{value};
@@ -289,8 +299,10 @@ switch ($Q{REQUEST_OPTION}){
 # [ELSE SWITCH] ************************************************************************
 	else {
 		print logger('LOG',"XML-PARSE-RETURN-$Q{REQUEST_OPTION}",'NO OPTION FOUND $@') if $CONF{debug}>1;
+		logger('METRIC','XML_PARSE','UNKNOWN');
 		return "Error: $@";}
 }#switch OPTION
+logger('METRIC','XML_PARSE',"$Q{REQUEST_OPTION}");
 return $Q{PARSE_RESULT};
 }#END sub XML_PARSE
 #
@@ -427,7 +439,7 @@ switch ($Q{USSD_CODE}){
 # [SUPPORT] ************************************************************************
 	case "000"{
 		($Q{EMAIL_FROM},$Q{EMAIL_TO},$Q{EMAIL_SUBJ},$Q{EMAIL_BODY})=split(',',TEMPLATE('email:support'));			
-			$Q{EMAIL_RESULT}=EMAIL();
+		#	$Q{EMAIL_RESULT}=EMAIL();
 	logger('LOG','USSD-SUPPORT-REQUEST',"$Q{USSD_CODE} $Q{EMAIL_RESULT}") if $CONF{debug}==4;
 		return ('OK',1,response('MOC_RESPONSE','DEFAULT',"SUPPORT TICKET #$Q{TID} REGISTERED"));		
 			}#case 000
@@ -526,7 +538,7 @@ if ($Q{USSD_DEST}>0) {#если трансфер
 	$Q{SUB_PIN} ? return ('OK',1,response('MOC_RESPONSE','DEFAULT','LOGIN:sim'.$Q{SUB_CN}.'*'.$CONF{voip_domain}.' PIN:'.$Q{SUB_PIN}.TEMPLATE('voip:user_help'))) : return ('WARNING',1,response('MOC_RESPONSE','DEFAULT','NEED TO SET NEW PIN. CALL *000*5#'));
 	}#case 125
 # [CALL RATE] ************************************************************************
-	case "x126"{
+	case "126"{
 	$Q{INCOMING_RATE}=sprintf '%.2f',${CALL_RATE($Q{USSD_DEST})}{RATE}/100;
 	$Q{OUTGOING_RATE}=sprintf '%.2f',$Q{INCOMING_RATE}+$R->HGET('RATE_CACHE:'.$Q{MCC}.$Q{MNC},'RATE')/100*$CONF{'markup_rate'};
 	$Q{USSD_DEST}=~/^(\+|00)?([1-9]\d{1,15})$/ ? return ('OK',1,response('MOC_RESPONSE','DEFAULT',TEMPLATE('ussd:126:rate'))) : return ('NO DEST',1,response('MOC_RESPONSE','DEFAULT',TEMPLATE('ussd:126:nodest')));
@@ -616,6 +628,7 @@ else{# timeout
 }########## END sub CURL ####################################
 #
 sub GET_MSRN {
+		logger('METRIC','REQUEST_TYPE','GET_MSRN');
 return $R->GET('MSRN_CACHE:'.$Q{IMSI}) if $R->EXISTS('MSRN_CACHE:'.$Q{IMSI});
 	$Q{MSRN_TYPE} = $_[0] ? $_[0] : 'get_msrn';
 		$R->SETNX("STAT:AGENT:$Q{REMOTE_ADDR}:".substr($Q{TIMESTAMP},0,13).":$Q{MSRN_TYPE}","$CONF{api_threshold}");
@@ -800,10 +813,12 @@ $Q{MSISDN}=$_[0];
 my %HASH = scalar keys %{$Q{CACHE}={$R->HGETALL('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}))}} ? %{$Q{CACHE}} : %{ SQL(TEMPLATE('sql:get_rate'),'hash') };
 #************************************************************************
 if (!scalar keys %{$Q{CACHE}}){
+	logger('METRIC','CALL_RATE','RATE_DB');
 	$R->HSET('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}),$_,$HASH{$_}, sub{}) for keys %HASH;
 	$R->wait_one_response;
 	$R->EXPIRE('RATE_CACHE:'.substr($Q{MSISDN},0,$CONF{'rate_cache_len'}),defined $CONF{'rate_cache_ttl'} ? $CONF{'rate_cache_ttl'} :86400 );
 	}#if cache
+	else {logger('METRIC','CALL_RATE','RATE_CACHE')}#if db
 	$R->HSET('RATE_CACHE:'.$Q{MCC}.$Q{MNC},'RATE',$HASH{RATE}) if $_[1];
 #************************************************************************
 map {$Q{$_}=$HASH{$_}} keys %HASH; #map for DID call
@@ -868,6 +883,10 @@ case 'LOG'{
 case 'LOGEXPIRE'{
 	$R->EXPIRE('LOG:'.$Q{INNER_TID},$CONF{logexpire});
 	}#case LOGEX
+case 'METRIC'{
+	Net::Statsd::increment("MSRN.API.$RESPONSE_TYPE.$LOG");
+	Net::Statsd::timing("MSRN.API.TIMER.$RESPONSE_TYPE.$LOG",$timer*1000000); 
+}
 }#switch
 }########## END sub logger ######################################
 #
@@ -907,6 +926,7 @@ else{
 	return ('NO AUTH',-1,response('api_response','ERROR',"NO AUTH"));
 }#else no auth		
 logger('LOG','API',"$Q{CODE}") if $CONF{debug}>2;
+logger('METRIC','API',"$Q{CODE}");
 switch ($Q{CODE}){
 # [VERSION] *******************************************************************************************************
 	case 'version' {
